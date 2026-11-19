@@ -1,8 +1,10 @@
 mod ai;
+mod fullscreen;
 mod lyrics;
 mod media;
 mod notch_window;
 mod shelf;
+mod tray;
 mod weather;
 
 use ai::{
@@ -15,8 +17,9 @@ use media::{
     set_system_volume, start_media_watcher, toggle_system_mute, MediaState,
 };
 use notch_window::{
-    focus_notch_window, get_notch_state, position_notch_top_center, recenter_notch,
-    set_dragging_active, set_notch_collapsed_wide, set_notch_input_lock, set_notch_mega,
+    focus_notch_window, get_notch_preferences, get_notch_state, load_notch_preferences,
+    position_notch_top_center, quit_app, recenter_notch, set_dragging_active,
+    set_hide_in_fullscreen, set_notch_collapsed_wide, set_notch_input_lock, set_notch_mega,
     set_notch_pinned, set_notch_tall, start_hover_tracker, NotchState,
 };
 use shelf::{
@@ -25,11 +28,13 @@ use shelf::{
     ShelfDragPayload, ShelfState,
 };
 use tauri::{DragDropEvent, Emitter, Manager, WindowEvent};
+use tray::{setup_tray, TrayHandles};
 use weather::{fetch_weather, WeatherCache};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let notch_state = NotchState::default();
+    let tray_handles = TrayHandles::default();
     let media_state = MediaState::default();
     let lyrics_cache = LyricsCache::default();
     let weather_cache = WeatherCache::default();
@@ -38,14 +43,17 @@ pub fn run() {
 
     tauri::Builder::default()
         .manage(notch_state.clone())
+        .manage(tray_handles.clone())
         .manage(media_state.clone())
         .manage(lyrics_cache)
         .manage(weather_cache)
         .manage(shelf_state.clone())
         .manage(ai_state.clone())
         .setup(move |app| {
+            load_notch_preferences(app.handle(), &notch_state);
             load_initial_items(app.handle(), &shelf_state);
             load_initial_ai_config(app.handle(), &ai_state);
+            setup_tray(app, notch_state.clone(), tray_handles.clone())?;
             if let Some(window) = app.get_webview_window("notch") {
                 position_notch_top_center(&window);
                 let _ = window.set_ignore_cursor_events(true);
@@ -105,12 +113,15 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_notch_state,
             set_notch_pinned,
+            get_notch_preferences,
+            set_hide_in_fullscreen,
             set_notch_tall,
             set_notch_mega,
             set_notch_collapsed_wide,
             set_notch_input_lock,
             focus_notch_window,
             recenter_notch,
+            quit_app,
             get_media_state,
             media_toggle_play,
             media_next,
