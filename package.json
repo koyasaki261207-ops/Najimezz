@@ -8,7 +8,11 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
-    "generate:icons": "node scripts/create-icon.mjs && tauri icon src-tauri/icons/icon.png"
+    "generate:icons": "node scripts/create-icon.mjs && tauri icon src-tauri/icons/icon.png",
+    "build:exe": "tauri build --no-bundle",
+    "shortcut": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/create-desktop-shortcut.ps1 -Mode release",
+    "shortcut:rebuild": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/create-desktop-shortcut.ps1 -Mode release -Rebuild",
+    "shortcut:dev": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/create-desktop-shortcut.ps1 -Mode dev"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.2.0",
