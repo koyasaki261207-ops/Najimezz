@@ -89,10 +89,10 @@ pub struct AiState {
 fn normalize_model(raw: &str) -> String {
     match raw.trim() {
         "gemini-4-hydrogen" => "gemini-4-hydrogen".to_string(),
+        "gemini-3.8-flash" | "gemini-2.5-flash" => "gemini-3.8-flash".to_string(),
         "gemini-4-neon" => "gemini-4-neon".to_string(),
         "gemini-4-carbon" => "gemini-4-carbon".to_string(),
         "gemini-4-argon" => "gemini-4-argon".to_string(),
-        "gemini-2.5-flash" => "gemini-2.5-flash".to_string(),
         _ => DEFAULT_MODEL.to_string(),
     }
 }
@@ -609,21 +609,68 @@ async fn search_web_free(query: &str) -> Vec<WebSearchHit> {
     search_ddg_instant_answer(&client, trimmed, MAX_WEB_RESULTS).await
 }
 
-fn build_thinking_config(model: &str, level: &str) -> Value {
-    if model.starts_with("gemini-4-") {
-        json!({
-            "thinkingLevel": level
-        })
-    } else {
-        let budget: u32 = match level {
-            "low" => 1024,
-            "medium" => 4096,
-            _ => 8192,
+fn build_generate_body(
+    system_text: &str,
+    contents: &[Value],
+    model: &str,
+    level: &str,
+    include_thinking: bool,
+) -> Value {
+    let mut body = json!({
+        "systemInstruction": {
+            "parts": [{ "text": system_text }]
+        },
+        "contents": contents
+    });
+
+    if include_thinking {
+        let thinking_cfg = if model.starts_with("gemini-4-") || model.starts_with("gemini-3") {
+            json!({ "thinkingLevel": level })
+        } else {
+            let budget: u32 = match level {
+                "low" => 1024,
+                "medium" => 4096,
+                _ => 8192,
+            };
+            json!({ "thinkingBudget": budget })
         };
-        json!({
-            "thinkingBudget": budget
-        })
+
+        if let Some(obj) = body.as_object_mut() {
+            obj.insert(
+                "generationConfig".to_string(),
+                json!({ "thinkingConfig": thinking_cfg }),
+            );
+        }
     }
+
+    body
+}
+
+async fn post_gemini_request(
+    client: &reqwest::Client,
+    api_key: &str,
+    model: &str,
+    body: &Value,
+) -> Result<(reqwest::StatusCode, Value), String> {
+    let endpoint = format!(
+        "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+    );
+
+    let resp = client
+        .post(&endpoint)
+        .header("x-goog-api-key", api_key)
+        .json(body)
+        .send()
+        .await
+        .map_err(|e| format!("Lỗi kết nối Gemini API: {e}"))?;
+
+    let status = resp.status();
+    let payload: Value = resp
+        .json()
+        .await
+        .map_err(|e| format!("Phản hồi không hợp lệ từ Gemini API: {e}"))?;
+
+    Ok((status, payload))
 }
 
 #[tauri::command]
@@ -797,39 +844,61 @@ pub async fn ai_send_message(
         })
         .collect();
 
-    let body = json!({
-        "systemInstruction": {
-            "parts": [{ "text": format!("{SYSTEM_PROMPT} Ngày hiện tại (UTC): {today_utc}.") }]
-        },
-        "contents": contents,
-        "generationConfig": {
-            "thinkingConfig": build_thinking_config(&effective_model, &effective_level)
-        }
-    });
-
-    let endpoint = format!(
-        "https://generativelanguage.googleapis.com/v1beta/models/{effective_model}:generateContent"
-    );
-
+    let system_text = format!("{SYSTEM_PROMPT} Ngày hiện tại (UTC): {today_utc}.");
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(REQUEST_TIMEOUT_SECS))
         .user_agent("NusaClone/2.1.0")
         .build()
         .map_err(|e| format!("Không khởi tạo được HTTP client: {e}"))?;
 
-    let resp = client
-        .post(&endpoint)
-        .header("x-goog-api-key", &api_key)
-        .json(&body)
-        .send()
-        .await
-        .map_err(|e| format!("Lỗi kết nối Gemini API: {e}"))?;
+    let mut used_model = effective_model.clone();
+    let mut used_level = effective_level.clone();
 
-    let status = resp.status();
-    let payload: Value = resp
-        .json()
-        .await
-        .map_err(|e| format!("Phản hồi không hợp lệ từ Gemini API: {e}"))?;
+    let body = build_generate_body(&system_text, &contents, &used_model, &used_level, true);
+    let (mut status, mut payload) =
+        post_gemini_request(&client, &api_key, &used_model, &body).await?;
+
+    if status.as_u16() == 400 {
+        let msg_lower = payload
+            .pointer("/error/message")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_lowercase();
+        if msg_lower.contains("thinking") {
+            let retry_body =
+                build_generate_body(&system_text, &contents, &used_model, &used_level, false);
+            let res = post_gemini_request(&client, &api_key, &used_model, &retry_body).await?;
+            status = res.0;
+            payload = res.1;
+        }
+    }
+
+    if (status.as_u16() == 503 || status.as_u16() == 429) && used_model != "gemini-3.8-flash" {
+        used_model = "gemini-3.8-flash".to_string();
+        used_level = normalize_thinking_level(&used_model, &used_level);
+
+        let fb_body =
+            build_generate_body(&system_text, &contents, &used_model, &used_level, true);
+        let res = post_gemini_request(&client, &api_key, &used_model, &fb_body).await?;
+        status = res.0;
+        payload = res.1;
+
+        if status.as_u16() == 400 {
+            let msg_lower = payload
+                .pointer("/error/message")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_lowercase();
+            if msg_lower.contains("thinking") {
+                let fb_retry_body =
+                    build_generate_body(&system_text, &contents, &used_model, &used_level, false);
+                let retry_res =
+                    post_gemini_request(&client, &api_key, &used_model, &fb_retry_body).await?;
+                status = retry_res.0;
+                payload = retry_res.1;
+            }
+        }
+    }
 
     if !status.is_success() {
         let api_msg = payload
@@ -838,7 +907,7 @@ pub async fn ai_send_message(
             .unwrap_or("Yêu cầu thất bại");
         if status.as_u16() == 429 {
             return Err(format!(
-                "Gemini API (429): Hết hạn mức cho model {effective_model}. Hãy thử đổi sang model Gemini 2.5 Flash hoặc kiểm tra hạn mức tại https://ai.dev/rate-limit. Chi tiết: {api_msg}"
+                "Gemini API (429): Hết hạn mức cho model {used_model}. Kiểm tra tại https://ai.dev/rate-limit. Chi tiết: {api_msg}"
             ));
         }
         return Err(format!("Gemini API ({}): {api_msg}", status.as_u16()));
@@ -879,8 +948,8 @@ pub async fn ai_send_message(
         text: reply_text,
         sources,
         search_queries,
-        model: effective_model,
-        thinking_level: effective_level,
+        model: used_model,
+        thinking_level: used_level,
     })
 }
 

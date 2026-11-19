@@ -555,11 +555,31 @@ export function SettingsWindow() {
                         A little friend that lives in the notch
                       </div>
                     </div>
-                    <ToggleSwitch
-                      ariaLabel="Nusa mascot"
-                      checked={settings.showMascot}
-                      onChange={(checked) => updateSettings({ showMascot: checked })}
-                    />
+                    <div className="settings-inline-actions">
+                      {settings.showMascot && (
+                        <button
+                          type="button"
+                          className="settings-action-btn"
+                          onClick={() => {
+                            if (isTauriRuntime()) {
+                              invoke("trigger_mascot_reaction", {
+                                mood: "wave",
+                              }).catch(() => {});
+                            }
+                            flashNotice("Nusa đang vẫy tay chào trên thanh Notch!");
+                          }}
+                        >
+                          <span>Say hello</span>
+                        </button>
+                      )}
+                      <ToggleSwitch
+                        ariaLabel="Nusa mascot"
+                        checked={settings.showMascot}
+                        onChange={(checked) =>
+                          updateSettings({ showMascot: checked })
+                        }
+                      />
+                    </div>
                   </div>
 
                   <div className="settings-row">

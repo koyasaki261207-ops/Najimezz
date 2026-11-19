@@ -11,8 +11,8 @@ use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, State, WebviewWindow};
 
 pub const WINDOW_WIDTH_LOGICAL: f64 = 800.0;
-const HIDDEN_BAR_HALF_WIDTH: f64 = 84.0;
-const HIDDEN_BAR_HEIGHT: f64 = 12.0;
+const HIDDEN_BAR_HALF_WIDTH: f64 = 35.0;
+const HIDDEN_BAR_HEIGHT: f64 = 10.0;
 const COMPACT_PILL_HALF_WIDTH: f64 = 128.0;
 const COMPACT_PILL_HEIGHT: f64 = 42.0;
 const COLLAPSED_WIDE_HALF_WIDTH: f64 = 236.0;
@@ -36,6 +36,8 @@ pub struct NotchState {
     pub wide_collapsed: Arc<AtomicBool>,
     pub minimal_notch: Arc<AtomicBool>,
     pub open_on_click: Arc<AtomicBool>,
+    pub show_mascot: Arc<AtomicBool>,
+    pub mascot_peek: Arc<AtomicBool>,
     pub dragging: Arc<AtomicBool>,
     pub input_lock: Arc<AtomicBool>,
     pub ask_open: Arc<AtomicBool>,
@@ -53,6 +55,8 @@ impl Default for NotchState {
             wide_collapsed: Arc::new(AtomicBool::new(false)),
             minimal_notch: Arc::new(AtomicBool::new(true)),
             open_on_click: Arc::new(AtomicBool::new(false)),
+            show_mascot: Arc::new(AtomicBool::new(true)),
+            mascot_peek: Arc::new(AtomicBool::new(false)),
             dragging: Arc::new(AtomicBool::new(false)),
             input_lock: Arc::new(AtomicBool::new(false)),
             ask_open: Arc::new(AtomicBool::new(false)),
@@ -291,9 +295,10 @@ pub fn start_hover_tracker(app: AppHandle, state: NotchState) {
 
             let is_wide_collapsed = state.wide_collapsed.load(Ordering::Relaxed);
             let is_minimal = state.minimal_notch.load(Ordering::Relaxed);
+            let is_mascot_peek = state.mascot_peek.load(Ordering::Relaxed);
             let (collapsed_half_width, collapsed_height) = if is_wide_collapsed {
                 (COLLAPSED_WIDE_HALF_WIDTH, COLLAPSED_LYRICS_HEIGHT)
-            } else if is_minimal {
+            } else if is_minimal && !is_mascot_peek {
                 (HIDDEN_BAR_HALF_WIDTH, HIDDEN_BAR_HEIGHT)
             } else {
                 (COMPACT_PILL_HALF_WIDTH, COMPACT_PILL_HEIGHT)

@@ -12,6 +12,7 @@ import { listen } from "@tauri-apps/api/event";
 import { ChevronLeft, ChevronRight, Pin } from "lucide-react";
 import { useAppSettings } from "../hooks/useAppSettings";
 import { useLyrics } from "../hooks/useLyrics";
+import { useMascot } from "../hooks/useMascot";
 import { useMedia } from "../hooks/useMedia";
 import { useNotchWindow } from "../hooks/useNotchWindow";
 import { usePomodoro } from "../hooks/usePomodoro";
@@ -22,6 +23,7 @@ import { NOTCH_PAGES } from "../notch/pageRegistry";
 import type { NotchPageDefinition, NotchPageId } from "../types/notch";
 import { AiPage } from "./AiPage";
 import { CalendarPage } from "./CalendarPage";
+import { MascotFace } from "./MascotFace";
 import { MusicPage } from "./MusicPage";
 import { NotchDock } from "./NotchDock";
 import { NusaMascot } from "./NusaMascot";
@@ -68,8 +70,10 @@ function resolveScaleFactor(scaleOption: string): number {
 }
 
 export function NotchShell() {
-  const { expanded, pinned, isTauri, togglePinned, setBrowserHover } = useNotchWindow();
+  const { expanded, pinned, isTauri, togglePinned, setBrowserHover } =
+    useNotchWindow();
   const { settings, updateSettings } = useAppSettings();
+  const mascotCtrl = useMascot(settings.showMascot);
   const mediaCtrl = useMedia();
   const lyricsCtrl = useLyrics(
     mediaCtrl.media,
@@ -93,17 +97,32 @@ export function NotchShell() {
     }, 2400);
   }, []);
 
+  const handleMilestoneNotify = useCallback(
+    (message: string) => {
+      showToast(message);
+      if (
+        settings.showMascot &&
+        (message.startsWith("Xong ") ||
+          message.startsWith("Hoàn tất ") ||
+          message.startsWith("Đạt mục tiêu "))
+      ) {
+        mascotCtrl.triggerReaction("happy");
+      }
+    },
+    [mascotCtrl, settings.showMascot, showToast]
+  );
+
   const pomodoroCtrl = usePomodoro({
     focusMinutes: settings.pomodoroFocusMin,
     shortBreakMinutes: settings.pomodoroBreakMin,
     reminderSounds: settings.reminderSounds,
-    onNotify: showToast,
+    onNotify: handleMilestoneNotify,
   });
 
   const waterCtrl = useWater({
     goalMl: settings.waterGoalMl,
     reminderSounds: settings.reminderSounds,
-    onNotify: showToast,
+    onNotify: handleMilestoneNotify,
   });
 
   const visiblePages = useMemo<NotchPageDefinition[]>(() => {
@@ -127,7 +146,8 @@ export function NotchShell() {
   }, [settings.pagesOrder, settings.enabledPages]);
 
   const [activeIndex, setActiveIndex] = useState(0);
-  const [isAppMega, setIsAppMega] = useState(false);
+  const [isCalendarMega, setIsCalendarMega] = useState(false);
+  const [isAiMega, setIsAiMega] = useState(false);
   const [pendingOpenAsk, setPendingOpenAsk] = useState(false);
   const [askFocusNonce, setAskFocusNonce] = useState(0);
   const enabledPagesRef = useRef<NotchPageId[]>(settings.enabledPages);
@@ -157,7 +177,7 @@ export function NotchShell() {
         setPendingOpenAsk(true);
       } else {
         setPendingOpenAsk(false);
-        setIsAppMega(false);
+        setIsAiMega(false);
       }
     })
       .then((fn) => {
@@ -186,8 +206,10 @@ export function NotchShell() {
   const ActivePageComponent = activePage.component;
   const { media } = mediaCtrl;
 
-  const isMegaPage = activePage.id === "calendar" || activePage.id === "ai";
-  const isMegaMode = expanded && isMegaPage && isAppMega;
+  const isMegaMode =
+    expanded &&
+    ((activePage.id === "calendar" && isCalendarMega) ||
+      (activePage.id === "ai" && isAiMega));
   const isTallMode =
     expanded &&
     !isMegaMode &&
@@ -195,14 +217,37 @@ export function NotchShell() {
       activePage.id === "calendar");
   const showCollapsedLyrics =
     !expanded && !pinned && settings.showLyrics && media.hasSession;
+
+  const canShowMascot =
+    !expanded &&
+    !pinned &&
+    !showCollapsedLyrics &&
+    settings.showMascot &&
+    mascotCtrl.mood !== "hidden";
+
+  const showMascotFace =
+    canShowMascot &&
+    (mascotCtrl.peeking ||
+      (!settings.minimalNotch && !(media.hasSession && media.isPlaying)));
+
   const isHiddenTopBar =
-    !expanded && !pinned && !showCollapsedLyrics && settings.minimalNotch;
+    !expanded &&
+    !pinned &&
+    !showCollapsedLyrics &&
+    !showMascotFace &&
+    settings.minimalNotch;
 
   useEffect(() => {
-    if (!expanded || !isMegaPage) {
-      setIsAppMega(false);
+    if (!expanded || activePage.id !== "calendar") {
+      setIsCalendarMega(false);
     }
-  }, [expanded, activePage.id, isMegaPage]);
+  }, [expanded, activePage.id]);
+
+  useEffect(() => {
+    if (!expanded || activePage.id !== "ai") {
+      setIsAiMega(false);
+    }
+  }, [expanded, activePage.id]);
 
   useEffect(() => {
     if (!isTauri) return;
@@ -223,7 +268,9 @@ export function NotchShell() {
 
   useEffect(() => {
     if (!isTauri) return;
-    invoke("set_notch_collapsed_wide", { wide: showCollapsedLyrics }).catch(() => {});
+    invoke("set_notch_collapsed_wide", { wide: showCollapsedLyrics }).catch(
+      () => {}
+    );
   }, [showCollapsedLyrics, isTauri]);
 
   useEffect(() => {
@@ -248,7 +295,6 @@ export function NotchShell() {
 
   const stepPage = useCallback(
     (delta: number) => {
-      setIsAppMega(false);
       setActiveIndex(
         (prev) => (prev + delta + visiblePages.length) % visiblePages.length
       );
@@ -260,8 +306,10 @@ export function NotchShell() {
     (pageId: NotchPageId) => {
       const idx = visiblePages.findIndex((p) => p.id === pageId);
       if (idx >= 0) {
-        setIsAppMega(false);
         setActiveIndex(idx);
+        if (pageId === "ai") {
+          setAskFocusNonce((n) => n + 1);
+        }
       }
     },
     [visiblePages]
@@ -272,7 +320,9 @@ export function NotchShell() {
       if (!expanded || visiblePages.length <= 1) return;
       if (Math.abs(event.deltaY) < 12 && Math.abs(event.deltaX) < 12) return;
       const dominant =
-        Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
+        Math.abs(event.deltaX) > Math.abs(event.deltaY)
+          ? event.deltaX
+          : event.deltaY;
       stepPage(dominant > 0 ? 1 : -1);
     },
     [expanded, stepPage, visiblePages.length]
@@ -305,9 +355,11 @@ export function NotchShell() {
         : "is-expanded"
     : showCollapsedLyrics
       ? "is-collapsed is-collapsed-lyrics"
-      : isHiddenTopBar
-        ? "is-collapsed is-hidden-bar"
-        : "is-collapsed";
+      : showMascotFace
+        ? "is-collapsed is-mascot-mode"
+        : isHiddenTopBar
+          ? "is-collapsed is-hidden-bar"
+          : "is-collapsed";
 
   const frameModifierClasses = [
     frameSizeClass,
@@ -350,12 +402,13 @@ export function NotchShell() {
 
         <div className="notch-surface" onClick={handleCollapsedClick}>
           {!expanded ? (
-            isHiddenTopBar ? (
+            showMascotFace && mascotCtrl.mood !== "hidden" ? (
+              <MascotFace mood={mascotCtrl.mood} />
+            ) : isHiddenTopBar ? (
               <div className="notch-hidden-bar" aria-label="Hover to open Nusa">
                 {media.hasSession && media.isPlaying && (
                   <span className="hidden-bar-music-dot" aria-hidden="true" />
                 )}
-                <span className="hidden-bar-pill" aria-hidden="true" />
                 {pomodoroCtrl.status === "running" && (
                   <span className="hidden-bar-pomo-dot" aria-hidden="true" />
                 )}
@@ -386,7 +439,10 @@ export function NotchShell() {
                 </div>
 
                 {showCollapsedLyrics && (
-                  <div className="collapsed-lyric-slot" title={lyricsCtrl.currentLineText}>
+                  <div
+                    className="collapsed-lyric-slot"
+                    title={lyricsCtrl.currentLineText}
+                  >
                     <span
                       key={lyricsCtrl.currentLineKey}
                       className={`collapsed-lyric-text ${isLyricMuted ? "is-muted" : ""}`}
@@ -456,17 +512,17 @@ export function NotchShell() {
                     <ShelfPage onNotify={showToast} shelfCtrl={shelfCtrl} />
                   ) : activePage.id === "calendar" ? (
                     <CalendarPage
-                      isMega={isMegaMode}
+                      isMega={isCalendarMega}
                       onNotify={showToast}
-                      onSetMega={setIsAppMega}
+                      onSetMega={setIsCalendarMega}
                       weekStartsOn={settings.weekStartsOn}
                     />
                   ) : activePage.id === "ai" ? (
                     <AiPage
                       focusNonce={askFocusNonce}
-                      isMega={isMegaMode}
+                      isMega={isAiMega}
                       onNotify={showToast}
-                      onSetMega={setIsAppMega}
+                      onSetMega={setIsAiMega}
                     />
                   ) : (
                     <ActivePageComponent />

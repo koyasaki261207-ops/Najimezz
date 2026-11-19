@@ -1,6 +1,7 @@
 mod ai;
 mod fullscreen;
 mod lyrics;
+mod mascot;
 mod media;
 mod notch_window;
 mod settings;
@@ -14,6 +15,7 @@ use ai::{
     save_ai_api_key, update_ai_settings, AiState,
 };
 use lyrics::{fetch_lyrics, LyricsCache};
+use mascot::{get_mascot_state, start_mascot_watcher, trigger_mascot_reaction, MascotState};
 use media::{
     get_media_state, get_system_volume, media_next, media_previous, media_seek, media_toggle_play,
     set_system_volume, start_media_watcher, toggle_system_mute, MediaState,
@@ -48,6 +50,7 @@ pub fn run() {
     let settings_state = SettingsState::default();
     let tray_handles = TrayHandles::default();
     let shortcut_status = ShortcutStatusState::default();
+    let mascot_state = MascotState::default();
     let media_state = MediaState::default();
     let lyrics_cache = LyricsCache::default();
     let weather_cache = WeatherCache::default();
@@ -60,6 +63,7 @@ pub fn run() {
         .manage(settings_state.clone())
         .manage(tray_handles.clone())
         .manage(shortcut_status.clone())
+        .manage(mascot_state.clone())
         .manage(media_state.clone())
         .manage(lyrics_cache)
         .manage(weather_cache)
@@ -81,6 +85,11 @@ pub fn run() {
             }
             start_hover_tracker(app.handle().clone(), notch_state.clone());
             start_media_watcher(app.handle().clone(), media_state.clone());
+            start_mascot_watcher(
+                app.handle().clone(),
+                notch_state.clone(),
+                mascot_state.clone(),
+            );
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -159,6 +168,8 @@ pub fn run() {
             open_settings_window,
             take_pending_settings_tab,
             get_ask_shortcut_status,
+            get_mascot_state,
+            trigger_mascot_reaction,
             get_media_state,
             media_toggle_play,
             media_next,

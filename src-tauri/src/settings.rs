@@ -208,6 +208,12 @@ pub fn sync_runtime_flags(
         .open_on_click
         .store(settings.open_trigger == "click", Ordering::Relaxed);
     notch_state
+        .show_mascot
+        .store(settings.show_mascot, Ordering::Relaxed);
+    if !settings.show_mascot {
+        notch_state.mascot_peek.store(false, Ordering::Relaxed);
+    }
+    notch_state
         .hide_in_fullscreen
         .store(settings.hide_in_fullscreen, Ordering::Relaxed);
     tray_handles.sync_hide_fullscreen_checked(settings.hide_in_fullscreen);
@@ -241,6 +247,9 @@ pub fn load_app_settings(
     notch_state
         .open_on_click
         .store(loaded.open_trigger == "click", Ordering::Relaxed);
+    notch_state
+        .show_mascot
+        .store(loaded.show_mascot, Ordering::Relaxed);
     notch_state
         .hide_in_fullscreen
         .store(loaded.hide_in_fullscreen, Ordering::Relaxed);
