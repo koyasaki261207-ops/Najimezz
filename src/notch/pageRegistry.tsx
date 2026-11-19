@@ -1,4 +1,12 @@
-import { CloudSun, Droplet, Inbox, LayoutGrid, Music, Timer } from "lucide-react";
+import {
+  Calendar as CalendarIcon,
+  CloudSun,
+  Droplet,
+  Inbox,
+  Music,
+  Sparkles,
+  Timer,
+} from "lucide-react";
 import type { NotchPageDefinition } from "../types/notch";
 
 function MusicFallbackSlot() {
@@ -73,17 +81,33 @@ function ShelfShellPlaceholder() {
   );
 }
 
-function AppsFallbackSlot() {
+function CalendarFallbackSlot() {
   return (
     <div className="page-placeholder">
-      <LayoutGrid
+      <CalendarIcon
         size={22}
         className="placeholder-icon"
-        style={{ color: "#6366F1" }}
+        style={{ color: "#22C55E" }}
       />
       <div className="placeholder-meta">
-        <div className="placeholder-title">Apps</div>
-        <div className="placeholder-subtitle">Mini-apps launcher</div>
+        <div className="placeholder-title">Calendar</div>
+        <div className="placeholder-subtitle">Schedule &amp; month overview</div>
+      </div>
+    </div>
+  );
+}
+
+function AiFallbackSlot() {
+  return (
+    <div className="page-placeholder">
+      <Sparkles
+        size={22}
+        className="placeholder-icon"
+        style={{ color: "#7C3AED" }}
+      />
+      <div className="placeholder-meta">
+        <div className="placeholder-title">Ask Nusa</div>
+        <div className="placeholder-subtitle">Gemini AI Assistant</div>
       </div>
     </div>
   );
@@ -126,10 +150,17 @@ export const NOTCH_PAGES: NotchPageDefinition[] = [
     component: ShelfShellPlaceholder,
   },
   {
-    id: "apps",
-    label: "Apps",
+    id: "calendar",
+    label: "Calendar",
     showHeaderTitle: true,
-    accentColor: "#6366F1",
-    component: AppsFallbackSlot,
+    accentColor: "#22C55E",
+    component: CalendarFallbackSlot,
+  },
+  {
+    id: "ai",
+    label: "Ask Nusa",
+    showHeaderTitle: true,
+    accentColor: "#7C3AED",
+    component: AiFallbackSlot,
   },
 ];

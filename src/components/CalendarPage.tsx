@@ -22,7 +22,14 @@ import {
   toDateKey,
   useCalendarEvents,
 } from "../hooks/useCalendarEvents";
-import type { MiniAppProps } from "../types/apps";
+import type { WeekStartOption } from "../types/settings";
+
+export interface CalendarPageProps {
+  isMega: boolean;
+  weekStartsOn: WeekStartOption;
+  onSetMega: (mega: boolean) => void;
+  onNotify: (message: string) => void;
+}
 
 const WEEKDAY_VN = [
   "Chủ Nhật",
@@ -34,7 +41,8 @@ const WEEKDAY_VN = [
   "Thứ Bảy",
 ];
 
-const WEEKDAY_HEADERS = ["T2", "T3", "T4", "T5", "T6", "T7", "CN"];
+const WEEKDAY_HEADERS_MONDAY = ["T2", "T3", "T4", "T5", "T6", "T7", "CN"];
+const WEEKDAY_HEADERS_SUNDAY = ["CN", "T2", "T3", "T4", "T5", "T6", "T7"];
 
 interface MonthGridCell {
   date: Date;
@@ -48,10 +56,16 @@ function daysInMonth(year: number, monthIndex: number): number {
   return new Date(year, monthIndex + 1, 0).getDate();
 }
 
-function buildMonthGrid(year: number, monthIndex: number, todayKey: string): MonthGridCell[] {
+function buildMonthGrid(
+  year: number,
+  monthIndex: number,
+  todayKey: string,
+  weekStartsOn: WeekStartOption
+): MonthGridCell[] {
   const firstOfMonth = new Date(year, monthIndex, 1);
   const jsDay = firstOfMonth.getDay();
-  const leadingOffset = jsDay === 0 ? 6 : jsDay - 1;
+  const leadingOffset =
+    weekStartsOn === "sunday" ? jsDay : jsDay === 0 ? 6 : jsDay - 1;
   const cells: MonthGridCell[] = [];
 
   for (let i = 0; i < 42; i++) {
@@ -69,8 +83,14 @@ function buildMonthGrid(year: number, monthIndex: number, todayKey: string): Mon
   return cells;
 }
 
-export function CalendarApp({ onNotify, isMega, onSetMega }: MiniAppProps) {
-  const { eventsByDate, addEvent, deleteEvent, getEventsForDate } = useCalendarEvents();
+export function CalendarPage({
+  isMega,
+  weekStartsOn,
+  onSetMega,
+  onNotify,
+}: CalendarPageProps) {
+  const { eventsByDate, addEvent, deleteEvent, getEventsForDate } =
+    useCalendarEvents();
 
   const [selectedDate, setSelectedDate] = useState<Date>(() => {
     const now = new Date();
@@ -95,6 +115,9 @@ export function CalendarApp({ onNotify, isMega, onSetMega }: MiniAppProps) {
   const dayEvents = getEventsForDate(selectedKey);
   const totalDays = daysInMonth(viewYear, viewMonth);
 
+  const weekdayHeaders =
+    weekStartsOn === "sunday" ? WEEKDAY_HEADERS_SUNDAY : WEEKDAY_HEADERS_MONDAY;
+
   const monthDays = useMemo(() => {
     const list: { day: number; date: Date; key: string }[] = [];
     for (let d = 1; d <= totalDays; d++) {
@@ -105,8 +128,8 @@ export function CalendarApp({ onNotify, isMega, onSetMega }: MiniAppProps) {
   }, [totalDays, viewYear, viewMonth]);
 
   const monthGrid = useMemo(
-    () => buildMonthGrid(viewYear, viewMonth, todayKey),
-    [viewYear, viewMonth, todayKey]
+    () => buildMonthGrid(viewYear, viewMonth, todayKey, weekStartsOn),
+    [viewYear, viewMonth, todayKey, weekStartsOn]
   );
 
   useEffect(() => {
@@ -119,7 +142,8 @@ export function CalendarApp({ onNotify, isMega, onSetMega }: MiniAppProps) {
 
   const shiftDay = (delta: number) => {
     setSelectedDate(
-      (prev) => new Date(prev.getFullYear(), prev.getMonth(), prev.getDate() + delta)
+      (prev) =>
+        new Date(prev.getFullYear(), prev.getMonth(), prev.getDate() + delta)
     );
   };
 
@@ -351,7 +375,7 @@ export function CalendarApp({ onNotify, isMega, onSetMega }: MiniAppProps) {
             </div>
 
             <div className="cal-weekdays-row">
-              {WEEKDAY_HEADERS.map((label) => (
+              {weekdayHeaders.map((label) => (
                 <span key={label} className="cal-weekday-head">
                   {label}
                 </span>

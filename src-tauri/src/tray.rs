@@ -1,12 +1,16 @@
 use crate::notch_window::{
-    apply_hide_in_fullscreen, apply_pinned_state, position_notch_top_center, NotchState,
+    apply_hide_in_fullscreen, apply_pinned_state, position_notch_top_center, toggle_ask_nusa,
+    NotchState,
 };
+use crate::settings::spawn_open_settings_window;
 use std::sync::{atomic::Ordering, Arc, Mutex};
 use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{App, Manager, Wry};
 
 const TRAY_ID: &str = "nusa-tray";
+const MENU_ASK_NUSA_ID: &str = "tray_ask_nusa";
+const MENU_SETTINGS_ID: &str = "tray_settings";
 const MENU_PIN_ID: &str = "tray_pin";
 const MENU_HIDE_FULLSCREEN_ID: &str = "tray_hide_fullscreen";
 const MENU_RECENTER_ID: &str = "tray_recenter";
@@ -48,6 +52,16 @@ pub fn setup_tray(
     let initial_pinned = notch_state.pinned.load(Ordering::Relaxed);
     let initial_hide_fs = notch_state.hide_in_fullscreen.load(Ordering::Relaxed);
 
+    let ask_item = MenuItem::with_id(
+        app,
+        MENU_ASK_NUSA_ID,
+        "Ask Nusa (Ctrl+Alt+Space)",
+        true,
+        None::<&str>,
+    )?;
+    let settings_item =
+        MenuItem::with_id(app, MENU_SETTINGS_ID, "Settings...", true, None::<&str>)?;
+    let sep_top = PredefinedMenuItem::separator(app)?;
     let pin_item = CheckMenuItem::with_id(
         app,
         MENU_PIN_ID,
@@ -72,6 +86,9 @@ pub fn setup_tray(
     let menu = Menu::with_items(
         app,
         &[
+            &ask_item,
+            &settings_item,
+            &sep_top,
             &pin_item,
             &hide_fs_item,
             &recenter_item,
@@ -92,6 +109,13 @@ pub fn setup_tray(
         .menu(&menu)
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| match event.id().as_ref() {
+            MENU_ASK_NUSA_ID => {
+                let notch_state = app.state::<NotchState>();
+                toggle_ask_nusa(app, &notch_state);
+            }
+            MENU_SETTINGS_ID => {
+                spawn_open_settings_window(app.clone(), None);
+            }
             MENU_PIN_ID => {
                 let notch_state = app.state::<NotchState>();
                 let tray_handles = app.state::<TrayHandles>();

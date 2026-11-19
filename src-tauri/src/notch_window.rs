@@ -1,8 +1,7 @@
 use crate::fullscreen;
+use crate::settings::{sync_hide_fullscreen_into_settings, SettingsState};
 use crate::tray::TrayHandles;
 use serde::{Deserialize, Serialize};
-use std::fs;
-use std::path::PathBuf;
 use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc,
@@ -14,6 +13,8 @@ use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, State, WebviewWindow}
 pub const WINDOW_WIDTH_LOGICAL: f64 = 800.0;
 const HIDDEN_BAR_HALF_WIDTH: f64 = 84.0;
 const HIDDEN_BAR_HEIGHT: f64 = 12.0;
+const COMPACT_PILL_HALF_WIDTH: f64 = 128.0;
+const COMPACT_PILL_HEIGHT: f64 = 42.0;
 const COLLAPSED_WIDE_HALF_WIDTH: f64 = 236.0;
 const COLLAPSED_LYRICS_HEIGHT: f64 = 42.0;
 const EXPANDED_HALF_WIDTH: f64 = 250.0;
@@ -25,7 +26,6 @@ const COLLAPSE_DELAY_MS: u64 = 240;
 const DRAG_OUTSIDE_RESET_MS: u64 = 700;
 const POLL_INTERVAL_MS: u64 = 32;
 const FULLSCREEN_POLL_EVERY_TICKS: u8 = 8;
-const NOTCH_CONFIG_FILENAME: &str = "notch_config.json";
 
 #[derive(Clone)]
 pub struct NotchState {
@@ -34,8 +34,11 @@ pub struct NotchState {
     pub tall: Arc<AtomicBool>,
     pub mega: Arc<AtomicBool>,
     pub wide_collapsed: Arc<AtomicBool>,
+    pub minimal_notch: Arc<AtomicBool>,
+    pub open_on_click: Arc<AtomicBool>,
     pub dragging: Arc<AtomicBool>,
     pub input_lock: Arc<AtomicBool>,
+    pub ask_open: Arc<AtomicBool>,
     pub hide_in_fullscreen: Arc<AtomicBool>,
     pub fullscreen_hidden: Arc<AtomicBool>,
 }
@@ -48,8 +51,11 @@ impl Default for NotchState {
             tall: Arc::new(AtomicBool::new(false)),
             mega: Arc::new(AtomicBool::new(false)),
             wide_collapsed: Arc::new(AtomicBool::new(false)),
+            minimal_notch: Arc::new(AtomicBool::new(true)),
+            open_on_click: Arc::new(AtomicBool::new(false)),
             dragging: Arc::new(AtomicBool::new(false)),
             input_lock: Arc::new(AtomicBool::new(false)),
+            ask_open: Arc::new(AtomicBool::new(false)),
             hide_in_fullscreen: Arc::new(AtomicBool::new(true)),
             fullscreen_hidden: Arc::new(AtomicBool::new(false)),
         }
@@ -62,48 +68,15 @@ pub struct NotchStatePayload {
     pub pinned: bool,
 }
 
+#[derive(Clone, Serialize)]
+pub struct AskNusaEventPayload {
+    pub open: bool,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct NotchPreferences {
     pub hide_in_fullscreen: bool,
-}
-
-impl Default for NotchPreferences {
-    fn default() -> Self {
-        Self {
-            hide_in_fullscreen: true,
-        }
-    }
-}
-
-fn preferences_file_path(app: &AppHandle) -> Option<PathBuf> {
-    let dir = app.path().app_data_dir().ok()?;
-    let _ = fs::create_dir_all(&dir);
-    Some(dir.join(NOTCH_CONFIG_FILENAME))
-}
-
-fn persist_preferences(app: &AppHandle, prefs: &NotchPreferences) {
-    let Some(path) = preferences_file_path(app) else {
-        return;
-    };
-    if let Ok(json) = serde_json::to_string_pretty(prefs) {
-        let _ = fs::write(path, json);
-    }
-}
-
-pub fn load_notch_preferences(app: &AppHandle, state: &NotchState) {
-    let Some(path) = preferences_file_path(app) else {
-        return;
-    };
-    let Ok(raw) = fs::read_to_string(path) else {
-        return;
-    };
-    let Ok(prefs) = serde_json::from_str::<NotchPreferences>(&raw) else {
-        return;
-    };
-    state
-        .hide_in_fullscreen
-        .store(prefs.hide_in_fullscreen, Ordering::Relaxed);
 }
 
 pub fn position_notch_top_center(window: &WebviewWindow) {
@@ -135,6 +108,61 @@ pub fn set_dragging_active(app: &AppHandle, state: &NotchState, active: bool) {
             let _ = window.set_ignore_cursor_events(false);
         }
     }
+}
+
+pub fn dismiss_ask_nusa_internal(app: &AppHandle, state: &NotchState) {
+    state.ask_open.store(false, Ordering::Relaxed);
+    state.input_lock.store(false, Ordering::Relaxed);
+    state.mega.store(false, Ordering::Relaxed);
+
+    let pinned = state.pinned.load(Ordering::Relaxed);
+    let next_expanded = pinned;
+    state.expanded.store(next_expanded, Ordering::Relaxed);
+
+    let _ = app.emit("notch:ask-nusa", AskNusaEventPayload { open: false });
+    let _ = app.emit(
+        "notch:state",
+        NotchStatePayload {
+            expanded: next_expanded,
+            pinned,
+        },
+    );
+}
+
+pub fn toggle_ask_nusa(app: &AppHandle, state: &NotchState) {
+    let already_open =
+        state.expanded.load(Ordering::Relaxed) && state.ask_open.load(Ordering::Relaxed);
+
+    if already_open {
+        dismiss_ask_nusa_internal(app, state);
+        return;
+    }
+
+    state.ask_open.store(true, Ordering::Relaxed);
+    state.input_lock.store(true, Ordering::Relaxed);
+    state.expanded.store(true, Ordering::Relaxed);
+    state.fullscreen_hidden.store(false, Ordering::Relaxed);
+
+    if let Some(window) = app.get_webview_window("notch") {
+        position_notch_top_center(&window);
+        let _ = window.show();
+        let _ = window.set_ignore_cursor_events(false);
+        let _ = window.set_focus();
+    }
+
+    let pinned = state.pinned.load(Ordering::Relaxed);
+    let _ = app.emit(
+        "notch:state",
+        NotchStatePayload {
+            expanded: true,
+            pinned,
+        },
+    );
+    let _ = app.emit("notch:ask-nusa", AskNusaEventPayload { open: true });
+}
+
+pub fn clear_ask_open_on_blur(state: &NotchState) {
+    state.ask_open.store(false, Ordering::Relaxed);
 }
 
 pub fn apply_pinned_state(
@@ -178,10 +206,12 @@ pub fn apply_hide_in_fullscreen(
         }
     }
 
+    let settings_state = app.state::<SettingsState>();
+    sync_hide_fullscreen_into_settings(app, &settings_state, enabled);
+
     let prefs = NotchPreferences {
         hide_in_fullscreen: enabled,
     };
-    persist_preferences(app, &prefs);
     app.emit("notch:preferences", prefs.clone())
         .map_err(|e| e.to_string())?;
     Ok(prefs)
@@ -202,8 +232,11 @@ pub fn start_hover_tracker(app: AppHandle, state: NotchState) {
                 continue;
             };
 
+            let ask_bypass = state.ask_open.load(Ordering::Relaxed)
+                || state.input_lock.load(Ordering::Relaxed);
+
             let hide_fs_enabled = state.hide_in_fullscreen.load(Ordering::Relaxed);
-            if hide_fs_enabled {
+            if hide_fs_enabled && !ask_bypass {
                 if fs_tick == 0 {
                     cached_fullscreen = fullscreen::is_fullscreen_active();
                 }
@@ -213,7 +246,7 @@ pub fn start_hover_tracker(app: AppHandle, state: NotchState) {
                 fs_tick = 0;
             }
 
-            if hide_fs_enabled && cached_fullscreen {
+            if hide_fs_enabled && cached_fullscreen && !ask_bypass {
                 if !state.fullscreen_hidden.swap(true, Ordering::Relaxed) {
                     let _ = window.set_ignore_cursor_events(true);
                     last_ignore = Some(true);
@@ -223,6 +256,7 @@ pub fn start_hover_tracker(app: AppHandle, state: NotchState) {
                     let was_expanded = state.expanded.swap(false, Ordering::Relaxed);
                     state.mega.store(false, Ordering::Relaxed);
                     state.dragging.store(false, Ordering::Relaxed);
+                    state.ask_open.store(false, Ordering::Relaxed);
                     leave_started_at = None;
                     drag_outside_at = None;
 
@@ -256,10 +290,13 @@ pub fn start_hover_tracker(app: AppHandle, state: NotchState) {
             let center_x = WINDOW_WIDTH_LOGICAL / 2.0;
 
             let is_wide_collapsed = state.wide_collapsed.load(Ordering::Relaxed);
+            let is_minimal = state.minimal_notch.load(Ordering::Relaxed);
             let (collapsed_half_width, collapsed_height) = if is_wide_collapsed {
                 (COLLAPSED_WIDE_HALF_WIDTH, COLLAPSED_LYRICS_HEIGHT)
-            } else {
+            } else if is_minimal {
                 (HIDDEN_BAR_HALF_WIDTH, HIDDEN_BAR_HEIGHT)
+            } else {
+                (COMPACT_PILL_HALF_WIDTH, COMPACT_PILL_HEIGHT)
             };
 
             let is_mega = state.mega.load(Ordering::Relaxed);
@@ -310,13 +347,19 @@ pub fn start_hover_tracker(app: AppHandle, state: NotchState) {
             let currently_expanded = state.expanded.load(Ordering::Relaxed);
             let pinned = state.pinned.load(Ordering::Relaxed);
             let input_locked = state.input_lock.load(Ordering::Relaxed);
+            let ask_open = state.ask_open.load(Ordering::Relaxed);
+            let open_on_click = state.open_on_click.load(Ordering::Relaxed);
 
-            let next_expanded = if pinned || dragging || input_locked {
+            let next_expanded = if pinned || dragging || input_locked || ask_open {
                 leave_started_at = None;
                 true
             } else if !currently_expanded {
                 leave_started_at = None;
-                in_collapsed
+                if open_on_click {
+                    false
+                } else {
+                    in_collapsed
+                }
             } else if in_expanded {
                 leave_started_at = None;
                 true
@@ -329,6 +372,7 @@ pub fn start_hover_tracker(app: AppHandle, state: NotchState) {
                 state.expanded.store(next_expanded, Ordering::Relaxed);
                 if !next_expanded {
                     state.mega.store(false, Ordering::Relaxed);
+                    state.ask_open.store(false, Ordering::Relaxed);
                 }
                 let _ = app.emit(
                     "notch:state",
@@ -363,6 +407,36 @@ pub fn get_notch_state(state: State<'_, NotchState>) -> NotchStatePayload {
         expanded: state.expanded.load(Ordering::Relaxed),
         pinned: state.pinned.load(Ordering::Relaxed),
     }
+}
+
+#[tauri::command]
+pub fn set_notch_expanded(
+    app: AppHandle,
+    state: State<'_, NotchState>,
+    expanded: bool,
+) -> Result<NotchStatePayload, String> {
+    state.expanded.store(expanded, Ordering::Relaxed);
+    if !expanded {
+        state.mega.store(false, Ordering::Relaxed);
+        state.ask_open.store(false, Ordering::Relaxed);
+    }
+    let payload = NotchStatePayload {
+        expanded,
+        pinned: state.pinned.load(Ordering::Relaxed),
+    };
+    app.emit("notch:state", payload.clone())
+        .map_err(|e| e.to_string())?;
+    Ok(payload)
+}
+
+#[tauri::command]
+pub fn dismiss_ask_nusa(app: AppHandle, state: State<'_, NotchState>) {
+    dismiss_ask_nusa_internal(&app, &state);
+}
+
+#[tauri::command]
+pub fn set_ask_open(state: State<'_, NotchState>, open: bool) {
+    state.ask_open.store(open, Ordering::Relaxed);
 }
 
 #[tauri::command]

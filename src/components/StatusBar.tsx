@@ -3,9 +3,10 @@ import { useClock } from "../hooks/useClock";
 
 interface StatusBarProps {
   compact?: boolean;
+  showDateTime?: boolean;
 }
 
-export function StatusBar({ compact = false }: StatusBarProps) {
+export function StatusBar({ compact = false, showDateTime = true }: StatusBarProps) {
   const battery = useBattery();
   const clock = useClock();
 
@@ -59,12 +60,14 @@ export function StatusBar({ compact = false }: StatusBarProps) {
         </svg>
       </div>
 
-      {!compact && <span className="status-date">{clock.dateText}</span>}
+      {showDateTime && !compact && <span className="status-date">{clock.dateText}</span>}
 
-      <span className="status-time">
-        <strong>{clock.timeText}</strong>
-        <span className="status-period">{clock.period}</span>
-      </span>
+      {showDateTime && (
+        <span className="status-time">
+          <strong>{clock.timeText}</strong>
+          <span className="status-period">{clock.period}</span>
+        </span>
+      )}
     </div>
   );
 }

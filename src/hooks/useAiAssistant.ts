@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import type {
   AiConfigView,
   AiMessage,
@@ -35,6 +36,8 @@ export interface UseAiAssistantResult {
   savingKey: boolean;
   setInputFocused: (focused: boolean) => void;
   focusWindow: () => void;
+  openAiSettings: () => void;
+  dismissAskNusa: () => void;
   saveApiKey: (apiKey: string) => Promise<void>;
   clearApiKey: () => Promise<void>;
   updateSettings: (
@@ -58,6 +61,9 @@ export function useAiAssistant(): UseAiAssistantResult {
 
   useEffect(() => {
     if (!tauri) return;
+
+    let unlistenConfig: (() => void) | undefined;
+
     invoke<AiConfigView>("get_ai_config")
       .then((loaded) => {
         setConfig(loaded);
@@ -66,6 +72,21 @@ export function useAiAssistant(): UseAiAssistantResult {
       .catch(() => {
         setConfigLoaded(true);
       });
+
+    listen<AiConfigView>("ai:config-updated", (event) => {
+      setConfig(event.payload);
+      setConfigLoaded(true);
+    })
+      .then((fn) => {
+        unlistenConfig = fn;
+      })
+      .catch(() => {});
+
+    return () => {
+      if (unlistenConfig) {
+        unlistenConfig();
+      }
+    };
   }, [tauri]);
 
   useEffect(() => {
@@ -84,6 +105,20 @@ export function useAiAssistant(): UseAiAssistantResult {
   const focusWindow = useCallback(() => {
     if (!tauri) return;
     invoke("focus_notch_window").catch(() => {});
+  }, [tauri]);
+
+  const openAiSettings = useCallback(() => {
+    if (tauri) {
+      invoke("open_settings_window", { tab: "ask-nusa" }).catch(() => {});
+    } else {
+      window.open("?window=settings&tab=ask-nusa", "_blank", "width=780,height=600");
+    }
+  }, [tauri]);
+
+  const dismissAskNusa = useCallback(() => {
+    setInputFocused(false);
+    if (!tauri) return;
+    invoke("dismiss_ask_nusa").catch(() => {});
   }, [tauri]);
 
   const saveApiKey = useCallback(
@@ -192,7 +227,7 @@ export function useAiAssistant(): UseAiAssistantResult {
             {
               id: createMessageId(),
               role: "model",
-              text: "Chế độ xem trước trình duyệt: hãy chạy bản Tauri để gọi trực tiếp Gemini 4 API từ Rust.",
+              text: "Chế độ xem trước trình duyệt: hãy chạy bản Tauri để gọi trực tiếp Gemini API từ Rust.",
               model: config.model,
               thinkingLevel: config.thinkingLevel,
               createdAtMs: Date.now(),
@@ -268,6 +303,8 @@ export function useAiAssistant(): UseAiAssistantResult {
     savingKey,
     setInputFocused,
     focusWindow,
+    openAiSettings,
+    dismissAskNusa,
     saveApiKey,
     clearApiKey,
     updateSettings,

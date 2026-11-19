@@ -23,7 +23,11 @@ export interface UseLyricsResult {
   currentLineKey: string;
 }
 
-export function useLyrics(media: MediaTrackState, positionMs: number): UseLyricsResult {
+export function useLyrics(
+  media: MediaTrackState,
+  positionMs: number,
+  offsetMs = 0
+): UseLyricsResult {
   const tauri = isTauriRuntime();
   const [lyrics, setLyrics] = useState<LyricsResult>(EMPTY_LYRICS);
   const [loading, setLoading] = useState(false);
@@ -74,7 +78,7 @@ export function useLyrics(media: MediaTrackState, positionMs: number): UseLyrics
     if (!lyrics.synced || lyrics.lines.length === 0) {
       return -1;
     }
-    const lookaheadMs = positionMs + 250;
+    const lookaheadMs = positionMs + 250 + offsetMs;
     let lo = 0;
     let hi = lyrics.lines.length - 1;
     let match = -1;
@@ -90,7 +94,7 @@ export function useLyrics(media: MediaTrackState, positionMs: number): UseLyrics
     }
 
     return match;
-  }, [lyrics.synced, lyrics.lines, positionMs]);
+  }, [lyrics.synced, lyrics.lines, positionMs, offsetMs]);
 
   const { currentLineText, currentLineKey } = useMemo(() => {
     if (!media.hasSession) {

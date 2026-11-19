@@ -5,7 +5,7 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 const AI_CONFIG_FILENAME: &str = "ai_config.json";
 const DEFAULT_MODEL: &str = "gemini-4-hydrogen";
@@ -657,7 +657,9 @@ pub fn save_ai_api_key(
     };
 
     persist_config(&app, &updated)?;
-    Ok(to_config_view(&updated))
+    let view = to_config_view(&updated);
+    let _ = app.emit("ai:config-updated", view.clone());
+    Ok(view)
 }
 
 #[tauri::command]
@@ -675,7 +677,9 @@ pub fn clear_ai_api_key(
     };
 
     persist_config(&app, &updated)?;
-    Ok(to_config_view(&updated))
+    let view = to_config_view(&updated);
+    let _ = app.emit("ai:config-updated", view.clone());
+    Ok(view)
 }
 
 #[tauri::command]
@@ -701,7 +705,9 @@ pub fn update_ai_settings(
     };
 
     persist_config(&app, &updated)?;
-    Ok(to_config_view(&updated))
+    let view = to_config_view(&updated);
+    let _ = app.emit("ai:config-updated", view.clone());
+    Ok(view)
 }
 
 #[tauri::command]

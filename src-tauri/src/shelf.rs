@@ -159,7 +159,16 @@ fn persist_items(app: &AppHandle, items: &[ShelfItem]) {
     }
 }
 
-pub fn load_initial_items(app: &AppHandle, state: &ShelfState) {
+pub fn load_initial_items(app: &AppHandle, state: &ShelfState, start_empty: bool) {
+    if start_empty {
+        let empty: Vec<ShelfItem> = Vec::new();
+        persist_items(app, &empty);
+        if let Ok(mut guard) = state.items.lock() {
+            guard.clear();
+        }
+        return;
+    }
+
     let Some(file_path) = storage_file_path(app) else {
         return;
     };
