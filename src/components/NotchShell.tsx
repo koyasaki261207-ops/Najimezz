@@ -4,12 +4,14 @@ import { ChevronLeft, ChevronRight, Pin } from "lucide-react";
 import { useLyrics } from "../hooks/useLyrics";
 import { useMedia } from "../hooks/useMedia";
 import { useNotchWindow } from "../hooks/useNotchWindow";
+import { useWeather } from "../hooks/useWeather";
 import { NOTCH_PAGES } from "../notch/pageRegistry";
 import type { NotchPageId } from "../types/notch";
 import { MusicPage } from "./MusicPage";
 import { NotchDock } from "./NotchDock";
 import { NusaMascot } from "./NusaMascot";
 import { StatusBar } from "./StatusBar";
+import { WeatherPage } from "./WeatherPage";
 
 const SHOW_LYRICS_STORAGE_KEY = "nusa.showLyrics";
 
@@ -36,6 +38,7 @@ export function NotchShell() {
   const { expanded, pinned, isTauri, togglePinned, setBrowserHover } = useNotchWindow();
   const mediaCtrl = useMedia();
   const lyricsCtrl = useLyrics(mediaCtrl.media, mediaCtrl.positionMs);
+  const weatherCtrl = useWeather();
 
   const [activeIndex, setActiveIndex] = useState(0);
   const [showLyrics, setShowLyrics] = useState<boolean>(() => {
@@ -213,6 +216,8 @@ export function NotchShell() {
                       showLyrics={showLyrics}
                       onToggleLyrics={handleToggleLyrics}
                     />
+                  ) : activePage.id === "weather" ? (
+                    <WeatherPage weatherCtrl={weatherCtrl} />
                   ) : (
                     <ActivePageComponent />
                   )}

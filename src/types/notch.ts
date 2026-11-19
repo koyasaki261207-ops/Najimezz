@@ -1,6 +1,6 @@
 import type { ComponentType } from "react";
 
-export type NotchPageId = "music" | "pomodoro" | "water" | "shelf";
+export type NotchPageId = "music" | "pomodoro" | "water" | "weather" | "shelf";
 
 export interface NotchPageDefinition {
   id: NotchPageId;

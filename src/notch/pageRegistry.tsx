@@ -1,4 +1,4 @@
-import { Droplet, Inbox, Music, Timer } from "lucide-react";
+import { CloudSun, Droplet, Inbox, Music, Timer } from "lucide-react";
 import type { NotchPageDefinition } from "../types/notch";
 
 function MusicFallbackSlot() {
@@ -25,9 +25,7 @@ function PomodoroShellPlaceholder() {
       />
       <div className="placeholder-meta">
         <div className="placeholder-title">25:00 · Ready</div>
-        <div className="placeholder-subtitle">
-          Pomodoro timer module slot ready
-        </div>
+        <div className="placeholder-subtitle">Pomodoro timer module slot ready</div>
       </div>
     </div>
   );
@@ -43,9 +41,23 @@ function WaterShellPlaceholder() {
       />
       <div className="placeholder-meta">
         <div className="placeholder-title">Hydration Tracker</div>
-        <div className="placeholder-subtitle">
-          Water reminder module slot ready
-        </div>
+        <div className="placeholder-subtitle">Water reminder module slot ready</div>
+      </div>
+    </div>
+  );
+}
+
+function WeatherFallbackSlot() {
+  return (
+    <div className="page-placeholder">
+      <CloudSun
+        size={22}
+        className="placeholder-icon"
+        style={{ color: "#FBBF24" }}
+      />
+      <div className="placeholder-meta">
+        <div className="placeholder-title">Date &amp; Weather</div>
+        <div className="placeholder-subtitle">Live calendar &amp; forecast</div>
       </div>
     </div>
   );
@@ -82,6 +94,13 @@ export const NOTCH_PAGES: NotchPageDefinition[] = [
     showHeaderTitle: true,
     accentColor: "#38BDF8",
     component: WaterShellPlaceholder,
+  },
+  {
+    id: "weather",
+    label: "Weather",
+    showHeaderTitle: true,
+    accentColor: "#FBBF24",
+    component: WeatherFallbackSlot,
   },
   {
     id: "shelf",

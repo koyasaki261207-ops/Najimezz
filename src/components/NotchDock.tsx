@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Droplet, Inbox, Music, Settings, Timer } from "lucide-react";
+import { CloudSun, Droplet, Inbox, Music, Settings, Timer } from "lucide-react";
 import type { NotchPageDefinition, NotchPageId } from "../types/notch";
 
 interface NotchDockProps {
@@ -17,6 +17,8 @@ function renderPageIcon(pageId: NotchPageId) {
       return <Timer size={14} strokeWidth={2.1} />;
     case "water":
       return <Droplet size={14} strokeWidth={2.1} />;
+    case "weather":
+      return <CloudSun size={14} strokeWidth={2.1} />;
     case "shelf":
       return <Inbox size={14} strokeWidth={2.1} />;
   }

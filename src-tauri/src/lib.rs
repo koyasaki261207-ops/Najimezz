@@ -1,6 +1,7 @@
 mod lyrics;
 mod media;
 mod notch_window;
+mod weather;
 
 use lyrics::{fetch_lyrics, LyricsCache};
 use media::{
@@ -12,17 +13,20 @@ use notch_window::{
     set_notch_pinned, set_notch_tall, start_hover_tracker, NotchState,
 };
 use tauri::Manager;
+use weather::{fetch_weather, WeatherCache};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let notch_state = NotchState::default();
     let media_state = MediaState::default();
     let lyrics_cache = LyricsCache::default();
+    let weather_cache = WeatherCache::default();
 
     tauri::Builder::default()
         .manage(notch_state.clone())
         .manage(media_state.clone())
         .manage(lyrics_cache)
+        .manage(weather_cache)
         .setup(move |app| {
             if let Some(window) = app.get_webview_window("notch") {
                 position_notch_top_center(&window);
@@ -46,7 +50,8 @@ pub fn run() {
             get_system_volume,
             set_system_volume,
             toggle_system_mute,
-            fetch_lyrics
+            fetch_lyrics,
+            fetch_weather
         ])
         .run(tauri::generate_context!())
         .expect("error while running Nusa application");
