@@ -9,7 +9,8 @@ use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, State, WebviewWindow}
 
 pub const WINDOW_WIDTH_LOGICAL: f64 = 540.0;
 const COLLAPSED_HALF_WIDTH: f64 = 132.0;
-const COLLAPSED_HEIGHT: f64 = 40.0;
+const COLLAPSED_WIDE_HALF_WIDTH: f64 = 236.0;
+const COLLAPSED_HEIGHT: f64 = 42.0;
 const EXPANDED_HALF_WIDTH: f64 = 250.0;
 const EXPANDED_HEIGHT: f64 = 196.0;
 const EXPANDED_TALL_HEIGHT: f64 = 286.0;
@@ -21,6 +22,7 @@ pub struct NotchState {
     pub expanded: Arc<AtomicBool>,
     pub pinned: Arc<AtomicBool>,
     pub tall: Arc<AtomicBool>,
+    pub wide_collapsed: Arc<AtomicBool>,
 }
 
 impl Default for NotchState {
@@ -29,6 +31,7 @@ impl Default for NotchState {
             expanded: Arc::new(AtomicBool::new(false)),
             pinned: Arc::new(AtomicBool::new(false)),
             tall: Arc::new(AtomicBool::new(false)),
+            wide_collapsed: Arc::new(AtomicBool::new(false)),
         }
     }
 }
@@ -75,14 +78,20 @@ pub fn start_hover_tracker(app: AppHandle, state: NotchState) {
             let rel_y = (cursor.y - outer_pos.y as f64) / scale;
             let center_x = WINDOW_WIDTH_LOGICAL / 2.0;
 
+            let collapsed_half_width = if state.wide_collapsed.load(Ordering::Relaxed) {
+                COLLAPSED_WIDE_HALF_WIDTH
+            } else {
+                COLLAPSED_HALF_WIDTH
+            };
+
             let expanded_height = if state.tall.load(Ordering::Relaxed) {
                 EXPANDED_TALL_HEIGHT
             } else {
                 EXPANDED_HEIGHT
             };
 
-            let in_collapsed = rel_x >= center_x - COLLAPSED_HALF_WIDTH
-                && rel_x <= center_x + COLLAPSED_HALF_WIDTH
+            let in_collapsed = rel_x >= center_x - collapsed_half_width
+                && rel_x <= center_x + collapsed_half_width
                 && rel_y >= 0.0
                 && rel_y <= COLLAPSED_HEIGHT;
 
@@ -165,6 +174,11 @@ pub fn set_notch_pinned(
 #[tauri::command]
 pub fn set_notch_tall(state: State<'_, NotchState>, tall: bool) {
     state.tall.store(tall, Ordering::Relaxed);
+}
+
+#[tauri::command]
+pub fn set_notch_collapsed_wide(state: State<'_, NotchState>, wide: bool) {
+    state.wide_collapsed.store(wide, Ordering::Relaxed);
 }
 
 #[tauri::command]

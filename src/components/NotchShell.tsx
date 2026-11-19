@@ -11,6 +11,8 @@ import { NotchDock } from "./NotchDock";
 import { NusaMascot } from "./NusaMascot";
 import { StatusBar } from "./StatusBar";
 
+const SHOW_LYRICS_STORAGE_KEY = "nusa.showLyrics";
+
 function NotchEar({ side }: { side: "left" | "right" }) {
   return (
     <svg
@@ -31,28 +33,51 @@ function NotchEar({ side }: { side: "left" | "right" }) {
 }
 
 export function NotchShell() {
-  const { expanded, pinned, isTauri, togglePinned, setBrowserHover } =
-    useNotchWindow();
+  const { expanded, pinned, isTauri, togglePinned, setBrowserHover } = useNotchWindow();
   const mediaCtrl = useMedia();
   const lyricsCtrl = useLyrics(mediaCtrl.media, mediaCtrl.positionMs);
 
   const [activeIndex, setActiveIndex] = useState(0);
-  const [showLyrics, setShowLyrics] = useState(false);
+  const [showLyrics, setShowLyrics] = useState<boolean>(() => {
+    try {
+      return window.localStorage.getItem(SHOW_LYRICS_STORAGE_KEY) === "true";
+    } catch {
+      return false;
+    }
+  });
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const activePage = NOTCH_PAGES[activeIndex];
   const ActivePageComponent = activePage.component;
+  const { media } = mediaCtrl;
+
   const isTallMode = expanded && activePage.id === "music" && showLyrics;
+  const showCollapsedLyrics = !expanded && showLyrics && media.hasSession;
 
   useEffect(() => {
     if (!isTauri) return;
     invoke("set_notch_tall", { tall: isTallMode }).catch(() => {});
   }, [isTallMode, isTauri]);
 
+  useEffect(() => {
+    if (!isTauri) return;
+    invoke("set_notch_collapsed_wide", { wide: showCollapsedLyrics }).catch(() => {});
+  }, [showCollapsedLyrics, isTauri]);
+
+  const handleToggleLyrics = useCallback(() => {
+    setShowLyrics((prev) => {
+      const next = !prev;
+      try {
+        window.localStorage.setItem(SHOW_LYRICS_STORAGE_KEY, String(next));
+      } catch {
+        // Ignore storage errors
+      }
+      return next;
+    });
+  }, []);
+
   const stepPage = useCallback((delta: number) => {
-    setActiveIndex(
-      (prev) => (prev + delta + NOTCH_PAGES.length) % NOTCH_PAGES.length
-    );
+    setActiveIndex((prev) => (prev + delta + NOTCH_PAGES.length) % NOTCH_PAGES.length);
   }, []);
 
   const handleSelectPage = useCallback((pageId: NotchPageId) => {
@@ -67,9 +92,7 @@ export function NotchShell() {
       if (!expanded) return;
       if (Math.abs(event.deltaY) < 12 && Math.abs(event.deltaX) < 12) return;
       const dominant =
-        Math.abs(event.deltaX) > Math.abs(event.deltaY)
-          ? event.deltaX
-          : event.deltaY;
+        Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
       stepPage(dominant > 0 ? 1 : -1);
     },
     [expanded, stepPage]
@@ -84,18 +107,24 @@ export function NotchShell() {
     }, 1800);
   }, []);
 
-  const { media } = mediaCtrl;
+  const frameClass = expanded
+    ? isTallMode
+      ? "is-expanded is-tall"
+      : "is-expanded"
+    : showCollapsedLyrics
+      ? "is-collapsed is-collapsed-lyrics"
+      : "is-collapsed";
+
+  const isLyricMuted =
+    lyricsCtrl.loading ||
+    lyricsCtrl.lyrics.instrumental ||
+    (!lyricsCtrl.lyrics.synced && lyricsCtrl.lyrics.plainLines.length === 0) ||
+    (lyricsCtrl.lyrics.synced && lyricsCtrl.activeLineIndex < 0);
 
   return (
     <div className="notch-viewport">
       <div
-        className={`notch-frame ${
-          expanded
-            ? isTallMode
-              ? "is-expanded is-tall"
-              : "is-expanded"
-            : "is-collapsed"
-        }`}
+        className={`notch-frame ${frameClass}`}
         onMouseEnter={() => setBrowserHover(true)}
         onMouseLeave={() => setBrowserHover(false)}
         onWheel={handleWheel}
@@ -105,7 +134,7 @@ export function NotchShell() {
 
         <div className="notch-surface">
           {!expanded ? (
-            <div className="notch-collapsed-bar">
+            <div className={`notch-collapsed-bar ${showCollapsedLyrics ? "has-lyrics" : ""}`}>
               <div className="collapsed-left">
                 {media.hasSession && media.thumbnail ? (
                   <img
@@ -124,6 +153,18 @@ export function NotchShell() {
                   </div>
                 )}
               </div>
+
+              {showCollapsedLyrics && (
+                <div className="collapsed-lyric-slot" title={lyricsCtrl.currentLineText}>
+                  <span
+                    key={lyricsCtrl.currentLineKey}
+                    className={`collapsed-lyric-text ${isLyricMuted ? "is-muted" : ""}`}
+                  >
+                    {lyricsCtrl.currentLineText}
+                  </span>
+                </div>
+              )}
+
               <div className="collapsed-right">
                 <StatusBar compact />
               </div>
@@ -133,9 +174,7 @@ export function NotchShell() {
               <header className="notch-header">
                 <div className="notch-header-left">
                   {activePage.showHeaderTitle && (
-                    <span className="notch-page-title">
-                      {activePage.label}
-                    </span>
+                    <span className="notch-page-title">{activePage.label}</span>
                   )}
                 </div>
 
@@ -172,9 +211,7 @@ export function NotchShell() {
                       mediaCtrl={mediaCtrl}
                       lyricsCtrl={lyricsCtrl}
                       showLyrics={showLyrics}
-                      onToggleLyrics={() =>
-                        setShowLyrics((prev) => !prev)
-                      }
+                      onToggleLyrics={handleToggleLyrics}
                     />
                   ) : (
                     <ActivePageComponent />
@@ -191,9 +228,7 @@ export function NotchShell() {
                 </button>
               </div>
 
-              {toastMessage && (
-                <div className="notch-toast">{toastMessage}</div>
-              )}
+              {toastMessage && <div className="notch-toast">{toastMessage}</div>}
 
               <NotchDock
                 pages={NOTCH_PAGES}

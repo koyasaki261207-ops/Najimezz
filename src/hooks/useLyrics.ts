@@ -19,19 +19,16 @@ export interface UseLyricsResult {
   lyrics: LyricsResult;
   loading: boolean;
   activeLineIndex: number;
+  currentLineText: string;
+  currentLineKey: string;
 }
 
-export function useLyrics(
-  media: MediaTrackState,
-  positionMs: number
-): UseLyricsResult {
+export function useLyrics(media: MediaTrackState, positionMs: number): UseLyricsResult {
   const tauri = isTauriRuntime();
   const [lyrics, setLyrics] = useState<LyricsResult>(EMPTY_LYRICS);
   const [loading, setLoading] = useState(false);
 
-  const trackKey = media.hasSession
-    ? `${media.title}:::${media.artist}`
-    : "";
+  const trackKey = media.hasSession ? `${media.title}:::${media.artist}` : "";
 
   useEffect(() => {
     if (!trackKey || !media.title) {
@@ -71,14 +68,7 @@ export function useLyrics(
     return () => {
       cancelled = true;
     };
-  }, [
-    trackKey,
-    media.title,
-    media.artist,
-    media.album,
-    media.durationMs,
-    tauri,
-  ]);
+  }, [trackKey, media.title, media.artist, media.album, media.durationMs, tauri]);
 
   const activeLineIndex = useMemo(() => {
     if (!lyrics.synced || lyrics.lines.length === 0) {
@@ -102,9 +92,60 @@ export function useLyrics(
     return match;
   }, [lyrics.synced, lyrics.lines, positionMs]);
 
+  const { currentLineText, currentLineKey } = useMemo(() => {
+    if (!media.hasSession) {
+      return { currentLineText: "", currentLineKey: "idle" };
+    }
+    if (loading) {
+      return { currentLineText: "Fetching lyrics...", currentLineKey: `loading:${trackKey}` };
+    }
+    if (lyrics.instrumental) {
+      return { currentLineText: "♪ Instrumental", currentLineKey: `inst:${trackKey}` };
+    }
+    if (lyrics.synced && lyrics.lines.length > 0) {
+      if (activeLineIndex >= 0) {
+        return {
+          currentLineText: lyrics.lines[activeLineIndex].text,
+          currentLineKey: `sync:${trackKey}:${activeLineIndex}`,
+        };
+      }
+      return {
+        currentLineText: `♪ ${media.title}`,
+        currentLineKey: `intro:${trackKey}`,
+      };
+    }
+    if (lyrics.plainLines.length > 0) {
+      const ratio =
+        media.durationMs > 0 ? Math.max(0, Math.min(0.999, positionMs / media.durationMs)) : 0;
+      const plainIdx = Math.floor(ratio * lyrics.plainLines.length);
+      return {
+        currentLineText: lyrics.plainLines[plainIdx] ?? "",
+        currentLineKey: `plain:${trackKey}:${plainIdx}`,
+      };
+    }
+    return {
+      currentLineText: `♪ ${media.title}`,
+      currentLineKey: `fallback:${trackKey}`,
+    };
+  }, [
+    media.hasSession,
+    media.title,
+    media.durationMs,
+    loading,
+    lyrics.instrumental,
+    lyrics.synced,
+    lyrics.lines,
+    lyrics.plainLines,
+    activeLineIndex,
+    positionMs,
+    trackKey,
+  ]);
+
   return {
     lyrics,
     loading,
     activeLineIndex,
+    currentLineText,
+    currentLineKey,
   };
 }
