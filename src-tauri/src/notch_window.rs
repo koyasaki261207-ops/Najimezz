@@ -15,6 +15,7 @@ const EXPANDED_HALF_WIDTH: f64 = 250.0;
 const EXPANDED_HEIGHT: f64 = 196.0;
 const EXPANDED_TALL_HEIGHT: f64 = 286.0;
 const COLLAPSE_DELAY_MS: u64 = 240;
+const DRAG_OUTSIDE_RESET_MS: u64 = 700;
 const POLL_INTERVAL_MS: u64 = 32;
 
 #[derive(Clone)]
@@ -23,6 +24,7 @@ pub struct NotchState {
     pub pinned: Arc<AtomicBool>,
     pub tall: Arc<AtomicBool>,
     pub wide_collapsed: Arc<AtomicBool>,
+    pub dragging: Arc<AtomicBool>,
 }
 
 impl Default for NotchState {
@@ -32,6 +34,7 @@ impl Default for NotchState {
             pinned: Arc::new(AtomicBool::new(false)),
             tall: Arc::new(AtomicBool::new(false)),
             wide_collapsed: Arc::new(AtomicBool::new(false)),
+            dragging: Arc::new(AtomicBool::new(false)),
         }
     }
 }
@@ -54,10 +57,30 @@ pub fn position_notch_top_center(window: &WebviewWindow) {
     }
 }
 
+pub fn set_dragging_active(app: &AppHandle, state: &NotchState, active: bool) {
+    state.dragging.store(active, Ordering::Relaxed);
+    if active {
+        let was_expanded = state.expanded.swap(true, Ordering::Relaxed);
+        if !was_expanded {
+            let _ = app.emit(
+                "notch:state",
+                NotchStatePayload {
+                    expanded: true,
+                    pinned: state.pinned.load(Ordering::Relaxed),
+                },
+            );
+        }
+        if let Some(window) = app.get_webview_window("notch") {
+            let _ = window.set_ignore_cursor_events(false);
+        }
+    }
+}
+
 pub fn start_hover_tracker(app: AppHandle, state: NotchState) {
     thread::spawn(move || {
         let mut last_ignore: Option<bool> = None;
         let mut leave_started_at: Option<Instant> = None;
+        let mut drag_outside_at: Option<Instant> = None;
 
         loop {
             thread::sleep(Duration::from_millis(POLL_INTERVAL_MS));
@@ -100,10 +123,31 @@ pub fn start_hover_tracker(app: AppHandle, state: NotchState) {
                 && rel_y >= 0.0
                 && rel_y <= expanded_height;
 
+            let in_drag_safe_zone = rel_x >= center_x - (EXPANDED_HALF_WIDTH + 48.0)
+                && rel_x <= center_x + (EXPANDED_HALF_WIDTH + 48.0)
+                && rel_y >= -20.0
+                && rel_y <= expanded_height + 48.0;
+
+            let mut dragging = state.dragging.load(Ordering::Relaxed);
+            if dragging {
+                if in_drag_safe_zone {
+                    drag_outside_at = None;
+                } else {
+                    let start = drag_outside_at.get_or_insert_with(Instant::now);
+                    if start.elapsed() >= Duration::from_millis(DRAG_OUTSIDE_RESET_MS) {
+                        state.dragging.store(false, Ordering::Relaxed);
+                        dragging = false;
+                        drag_outside_at = None;
+                    }
+                }
+            } else {
+                drag_outside_at = None;
+            }
+
             let currently_expanded = state.expanded.load(Ordering::Relaxed);
             let pinned = state.pinned.load(Ordering::Relaxed);
 
-            let next_expanded = if pinned {
+            let next_expanded = if pinned || dragging {
                 leave_started_at = None;
                 true
             } else if !currently_expanded {
@@ -128,7 +172,9 @@ pub fn start_hover_tracker(app: AppHandle, state: NotchState) {
                 );
             }
 
-            let cursor_on_notch = if next_expanded {
+            let cursor_on_notch = if dragging {
+                true
+            } else if next_expanded {
                 in_expanded
             } else {
                 in_collapsed

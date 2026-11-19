@@ -1,15 +1,17 @@
-import { useCallback, useEffect, useState, type WheelEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type WheelEvent } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { ChevronLeft, ChevronRight, Pin } from "lucide-react";
 import { useLyrics } from "../hooks/useLyrics";
 import { useMedia } from "../hooks/useMedia";
 import { useNotchWindow } from "../hooks/useNotchWindow";
+import { useShelf } from "../hooks/useShelf";
 import { useWeather } from "../hooks/useWeather";
 import { NOTCH_PAGES } from "../notch/pageRegistry";
 import type { NotchPageId } from "../types/notch";
 import { MusicPage } from "./MusicPage";
 import { NotchDock } from "./NotchDock";
 import { NusaMascot } from "./NusaMascot";
+import { ShelfPage } from "./ShelfPage";
 import { StatusBar } from "./StatusBar";
 import { WeatherPage } from "./WeatherPage";
 
@@ -39,6 +41,7 @@ export function NotchShell() {
   const mediaCtrl = useMedia();
   const lyricsCtrl = useLyrics(mediaCtrl.media, mediaCtrl.positionMs);
   const weatherCtrl = useWeather();
+  const shelfCtrl = useShelf();
 
   const [activeIndex, setActiveIndex] = useState(0);
   const [showLyrics, setShowLyrics] = useState<boolean>(() => {
@@ -49,6 +52,7 @@ export function NotchShell() {
     }
   });
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const toastTimerRef = useRef<number | null>(null);
 
   const activePage = NOTCH_PAGES[activeIndex];
   const ActivePageComponent = activePage.component;
@@ -66,6 +70,33 @@ export function NotchShell() {
     if (!isTauri) return;
     invoke("set_notch_collapsed_wide", { wide: showCollapsedLyrics }).catch(() => {});
   }, [showCollapsedLyrics, isTauri]);
+
+  useEffect(() => {
+    if (!shelfCtrl.isDragHovering) return;
+    const shelfIdx = NOTCH_PAGES.findIndex((p) => p.id === "shelf");
+    if (shelfIdx >= 0) {
+      setActiveIndex(shelfIdx);
+    }
+  }, [shelfCtrl.isDragHovering]);
+
+  useEffect(() => {
+    return () => {
+      if (toastTimerRef.current !== null) {
+        window.clearTimeout(toastTimerRef.current);
+      }
+    };
+  }, []);
+
+  const showToast = useCallback((message: string) => {
+    setToastMessage(message);
+    if (toastTimerRef.current !== null) {
+      window.clearTimeout(toastTimerRef.current);
+    }
+    toastTimerRef.current = window.setTimeout(() => {
+      setToastMessage(null);
+      toastTimerRef.current = null;
+    }, 1900);
+  }, []);
 
   const handleToggleLyrics = useCallback(() => {
     setShowLyrics((prev) => {
@@ -102,13 +133,8 @@ export function NotchShell() {
   );
 
   const handleOpenSettings = useCallback(() => {
-    setToastMessage("Settings window will be connected in next phase");
-    window.setTimeout(() => {
-      setToastMessage((curr) =>
-        curr === "Settings window will be connected in next phase" ? null : curr
-      );
-    }, 1800);
-  }, []);
+    showToast("Settings window will be connected in next phase");
+  }, [showToast]);
 
   const frameClass = expanded
     ? isTallMode
@@ -218,6 +244,8 @@ export function NotchShell() {
                     />
                   ) : activePage.id === "weather" ? (
                     <WeatherPage weatherCtrl={weatherCtrl} />
+                  ) : activePage.id === "shelf" ? (
+                    <ShelfPage onNotify={showToast} shelfCtrl={shelfCtrl} />
                   ) : (
                     <ActivePageComponent />
                   )}
@@ -238,8 +266,8 @@ export function NotchShell() {
               <NotchDock
                 pages={NOTCH_PAGES}
                 activePageId={activePage.id}
-                onSelectPage={handleSelectPage}
                 onOpenSettings={handleOpenSettings}
+                onSelectPage={handleSelectPage}
               />
             </div>
           )}
