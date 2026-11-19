@@ -1,18 +1,23 @@
+mod ai;
 mod lyrics;
 mod media;
 mod notch_window;
 mod shelf;
 mod weather;
 
+use ai::{
+    ai_send_message, clear_ai_api_key, get_ai_config, load_initial_ai_config, open_external_url,
+    save_ai_api_key, update_ai_settings, AiState,
+};
 use lyrics::{fetch_lyrics, LyricsCache};
 use media::{
     get_media_state, get_system_volume, media_next, media_previous, media_seek, media_toggle_play,
     set_system_volume, start_media_watcher, toggle_system_mute, MediaState,
 };
 use notch_window::{
-    get_notch_state, position_notch_top_center, recenter_notch, set_dragging_active,
-    set_notch_collapsed_wide, set_notch_mega, set_notch_pinned, set_notch_tall,
-    start_hover_tracker, NotchState,
+    focus_notch_window, get_notch_state, position_notch_top_center, recenter_notch,
+    set_dragging_active, set_notch_collapsed_wide, set_notch_input_lock, set_notch_mega,
+    set_notch_pinned, set_notch_tall, start_hover_tracker, NotchState,
 };
 use shelf::{
     add_paths_internal, add_shelf_paths, clear_shelf, copy_shelf_files, get_shelf_items,
@@ -29,6 +34,7 @@ pub fn run() {
     let lyrics_cache = LyricsCache::default();
     let weather_cache = WeatherCache::default();
     let shelf_state = ShelfState::default();
+    let ai_state = AiState::default();
 
     tauri::Builder::default()
         .manage(notch_state.clone())
@@ -36,8 +42,10 @@ pub fn run() {
         .manage(lyrics_cache)
         .manage(weather_cache)
         .manage(shelf_state.clone())
+        .manage(ai_state.clone())
         .setup(move |app| {
             load_initial_items(app.handle(), &shelf_state);
+            load_initial_ai_config(app.handle(), &ai_state);
             if let Some(window) = app.get_webview_window("notch") {
                 position_notch_top_center(&window);
                 let _ = window.set_ignore_cursor_events(true);
@@ -100,6 +108,8 @@ pub fn run() {
             set_notch_tall,
             set_notch_mega,
             set_notch_collapsed_wide,
+            set_notch_input_lock,
+            focus_notch_window,
             recenter_notch,
             get_media_state,
             media_toggle_play,
@@ -118,7 +128,13 @@ pub fn run() {
             clear_shelf,
             open_shelf_item,
             reveal_shelf_item,
-            copy_shelf_files
+            copy_shelf_files,
+            get_ai_config,
+            save_ai_api_key,
+            clear_ai_api_key,
+            update_ai_settings,
+            ai_send_message,
+            open_external_url
         ])
         .run(tauri::generate_context!())
         .expect("error while running Nusa application");

@@ -1,7 +1,7 @@
 import type { ComponentType } from "react";
 import type { LucideIcon } from "lucide-react";
 
-export type MiniAppId = "calendar";
+export type MiniAppId = "calendar" | "ai";
 
 export type MiniAppStatus = "ready" | "coming-soon";
 

@@ -1,5 +1,6 @@
-import { Calendar } from "lucide-react";
+import { Calendar, Sparkles } from "lucide-react";
 import type { MiniAppDefinition } from "../types/apps";
+import { AiApp } from "./AiApp";
 import { CalendarApp } from "./CalendarApp";
 
 export const MINI_APPS: MiniAppDefinition[] = [
@@ -13,6 +14,17 @@ export const MINI_APPS: MiniAppDefinition[] = [
     supportsTall: true,
     supportsMega: true,
     component: CalendarApp,
+  },
+  {
+    id: "ai",
+    name: "AI",
+    description: "Trợ lý Gemini 4 tích hợp tìm kiếm web Google Search",
+    accentColor: "#38BDF8",
+    icon: Sparkles,
+    status: "ready",
+    supportsTall: true,
+    supportsMega: true,
+    component: AiApp,
   },
 ];
 

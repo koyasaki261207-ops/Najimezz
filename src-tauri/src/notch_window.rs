@@ -28,6 +28,7 @@ pub struct NotchState {
     pub mega: Arc<AtomicBool>,
     pub wide_collapsed: Arc<AtomicBool>,
     pub dragging: Arc<AtomicBool>,
+    pub input_lock: Arc<AtomicBool>,
 }
 
 impl Default for NotchState {
@@ -39,6 +40,7 @@ impl Default for NotchState {
             mega: Arc::new(AtomicBool::new(false)),
             wide_collapsed: Arc::new(AtomicBool::new(false)),
             dragging: Arc::new(AtomicBool::new(false)),
+            input_lock: Arc::new(AtomicBool::new(false)),
         }
     }
 }
@@ -158,8 +160,9 @@ pub fn start_hover_tracker(app: AppHandle, state: NotchState) {
 
             let currently_expanded = state.expanded.load(Ordering::Relaxed);
             let pinned = state.pinned.load(Ordering::Relaxed);
+            let input_locked = state.input_lock.load(Ordering::Relaxed);
 
-            let next_expanded = if pinned || dragging {
+            let next_expanded = if pinned || dragging || input_locked {
                 leave_started_at = None;
                 true
             } else if !currently_expanded {
@@ -245,6 +248,19 @@ pub fn set_notch_mega(state: State<'_, NotchState>, mega: bool) {
 #[tauri::command]
 pub fn set_notch_collapsed_wide(state: State<'_, NotchState>, wide: bool) {
     state.wide_collapsed.store(wide, Ordering::Relaxed);
+}
+
+#[tauri::command]
+pub fn set_notch_input_lock(state: State<'_, NotchState>, locked: bool) {
+    state.input_lock.store(locked, Ordering::Relaxed);
+}
+
+#[tauri::command]
+pub fn focus_notch_window(app: AppHandle) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window("notch") {
+        window.set_focus().map_err(|e| e.to_string())?;
+    }
+    Ok(())
 }
 
 #[tauri::command]
