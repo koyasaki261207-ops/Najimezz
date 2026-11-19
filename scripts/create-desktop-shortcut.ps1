@@ -54,17 +54,24 @@ if ($Mode -eq "release") {
         $exePath = $fallbackExe.FullName
     }
 
-    $shortcutPath              = Join-Path $desktopDir "$ShortcutName.lnk"
-    $shortcut                  = $wsh.CreateShortcut($shortcutPath)
-    $shortcut.TargetPath       = $exePath
-    $shortcut.WorkingDirectory = Split-Path -Parent $exePath
-    $shortcut.Description      = "Launch Nusa Floating Notch"
-    if (Test-Path $iconPath) {
-        $shortcut.IconLocation = "$iconPath,0"
+    $desktopDirs = @($desktopDir)
+    $localDesktop = "C:\Users\$env:USERNAME\Desktop"
+    if ((Test-Path $localDesktop) -and ($localDesktop -ne $desktopDir)) {
+        $desktopDirs += $localDesktop
     }
-    $shortcut.Save()
 
-    Write-Host "Created Desktop shortcut (Release): $shortcutPath"
+    foreach ($dir in $desktopDirs) {
+        $shortcutPath = Join-Path $dir "$ShortcutName.lnk"
+        $shortcut = $wsh.CreateShortcut($shortcutPath)
+        $shortcut.TargetPath = $exePath
+        $shortcut.WorkingDirectory = Split-Path -Parent $exePath
+        $shortcut.Description = "Launch Nusa Floating Notch"
+        if (Test-Path $iconPath) {
+            $shortcut.IconLocation = "$iconPath,0"
+        }
+        $shortcut.Save()
+        Write-Host "Created Desktop shortcut (Release): $shortcutPath"
+    }
     Write-Host "Target: $exePath"
 } else {
     $vbsPath = Join-Path $projectRoot "scripts\launch-dev.vbs"
@@ -73,17 +80,24 @@ if ($Mode -eq "release") {
     }
 
     $wscriptExe = Join-Path $env:WINDIR "System32\wscript.exe"
-    $shortcutPath              = Join-Path $desktopDir "$ShortcutName (Dev).lnk"
-    $shortcut                  = $wsh.CreateShortcut($shortcutPath)
-    $shortcut.TargetPath       = $wscriptExe
-    $shortcut.Arguments        = "`"$vbsPath`""
-    $shortcut.WorkingDirectory = $projectRoot
-    $shortcut.Description      = "Launch Nusa Floating Notch in Dev Mode (Silent)"
-    if (Test-Path $iconPath) {
-        $shortcut.IconLocation = "$iconPath,0"
+    $desktopDirs = @($desktopDir)
+    $localDesktop = "C:\Users\$env:USERNAME\Desktop"
+    if ((Test-Path $localDesktop) -and ($localDesktop -ne $desktopDir)) {
+        $desktopDirs += $localDesktop
     }
-    $shortcut.Save()
 
-    Write-Host "Created Desktop shortcut (Dev): $shortcutPath"
+    foreach ($dir in $desktopDirs) {
+        $shortcutPath = Join-Path $dir "$ShortcutName (Dev).lnk"
+        $shortcut = $wsh.CreateShortcut($shortcutPath)
+        $shortcut.TargetPath = $wscriptExe
+        $shortcut.Arguments = "`"$vbsPath`""
+        $shortcut.WorkingDirectory = $projectRoot
+        $shortcut.Description = "Launch Nusa Floating Notch in Dev Mode (Silent)"
+        if (Test-Path $iconPath) {
+            $shortcut.IconLocation = "$iconPath,0"
+        }
+        $shortcut.Save()
+        Write-Host "Created Desktop shortcut (Dev): $shortcutPath"
+    }
     Write-Host "Target: $wscriptExe `"$vbsPath`""
 }
