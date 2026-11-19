@@ -48,6 +48,7 @@ export function NotchShell() {
 
   const [activeIndex, setActiveIndex] = useState(0);
   const [activeAppId, setActiveAppId] = useState<MiniAppId | null>(null);
+  const [isAppMega, setIsAppMega] = useState(false);
   const [showLyrics, setShowLyrics] = useState<boolean>(() => {
     try {
       return window.localStorage.getItem(SHOW_LYRICS_STORAGE_KEY) === "true";
@@ -63,11 +64,28 @@ export function NotchShell() {
   const { media } = mediaCtrl;
 
   const activeMiniApp = getMiniAppById(activeAppId);
+  const isMegaMode =
+    expanded &&
+    activePage.id === "apps" &&
+    Boolean(activeMiniApp?.supportsMega) &&
+    isAppMega;
   const isTallMode =
     expanded &&
+    !isMegaMode &&
     ((activePage.id === "music" && showLyrics) ||
       (activePage.id === "apps" && Boolean(activeMiniApp?.supportsTall)));
   const showCollapsedLyrics = !expanded && showLyrics && media.hasSession;
+
+  useEffect(() => {
+    if (!expanded || activePage.id !== "apps" || !activeAppId) {
+      setIsAppMega(false);
+    }
+  }, [expanded, activePage.id, activeAppId]);
+
+  useEffect(() => {
+    if (!isTauri) return;
+    invoke("set_notch_mega", { mega: isMegaMode }).catch(() => {});
+  }, [isMegaMode, isTauri]);
 
   useEffect(() => {
     if (!isTauri) return;
@@ -118,6 +136,16 @@ export function NotchShell() {
     });
   }, []);
 
+  const handleOpenApp = useCallback((appId: MiniAppId) => {
+    setActiveAppId(appId);
+    setIsAppMega(false);
+  }, []);
+
+  const handleCloseApp = useCallback(() => {
+    setIsAppMega(false);
+    setActiveAppId(null);
+  }, []);
+
   const stepPage = useCallback((delta: number) => {
     setActiveIndex((prev) => (prev + delta + NOTCH_PAGES.length) % NOTCH_PAGES.length);
   }, []);
@@ -145,9 +173,11 @@ export function NotchShell() {
   }, [showToast]);
 
   const frameClass = expanded
-    ? isTallMode
-      ? "is-expanded is-tall"
-      : "is-expanded"
+    ? isMegaMode
+      ? "is-expanded is-mega"
+      : isTallMode
+        ? "is-expanded is-tall"
+        : "is-expanded"
     : showCollapsedLyrics
       ? "is-collapsed is-collapsed-lyrics"
       : "is-collapsed";
@@ -257,9 +287,11 @@ export function NotchShell() {
                   ) : activePage.id === "apps" ? (
                     <AppsPage
                       activeAppId={activeAppId}
-                      onOpenApp={setActiveAppId}
-                      onCloseApp={() => setActiveAppId(null)}
+                      isMega={isMegaMode}
+                      onCloseApp={handleCloseApp}
                       onNotify={showToast}
+                      onOpenApp={handleOpenApp}
+                      onSetMega={setIsAppMega}
                     />
                   ) : (
                     <ActivePageComponent />

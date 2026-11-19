@@ -5,15 +5,19 @@ import type { MiniAppId } from "../types/apps";
 
 interface AppsPageProps {
   activeAppId: MiniAppId | null;
+  isMega: boolean;
   onOpenApp: (appId: MiniAppId) => void;
   onCloseApp: () => void;
+  onSetMega: (mega: boolean) => void;
   onNotify: (message: string) => void;
 }
 
 export function AppsPage({
   activeAppId,
+  isMega,
   onOpenApp,
   onCloseApp,
+  onSetMega,
   onNotify,
 }: AppsPageProps) {
   const gridRef = useRef<HTMLDivElement | null>(null);
@@ -30,10 +34,15 @@ export function AppsPage({
   if (activeApp) {
     const ActiveIcon = activeApp.icon;
     const ActiveAppComponent = activeApp.component;
+    const activeSizeClass = isMega
+      ? "is-mega"
+      : activeApp.supportsTall
+        ? "is-tall"
+        : "";
 
     return (
       <div
-        className={`apps-active-view ${activeApp.supportsTall ? "is-tall" : ""}`}
+        className={`apps-active-view ${activeSizeClass}`}
         onWheel={(event) => event.stopPropagation()}
       >
         <div className="apps-subbar">
@@ -56,7 +65,12 @@ export function AppsPage({
         </div>
 
         <div className="apps-active-stage">
-          <ActiveAppComponent onClose={onCloseApp} onNotify={onNotify} />
+          <ActiveAppComponent
+            isMega={isMega}
+            onClose={onCloseApp}
+            onNotify={onNotify}
+            onSetMega={onSetMega}
+          />
         </div>
       </div>
     );
@@ -64,11 +78,7 @@ export function AppsPage({
 
   return (
     <div className="apps-page">
-      <div
-        ref={gridRef}
-        className="apps-grid"
-        onWheel={handleGridWheel}
-      >
+      <div ref={gridRef} className="apps-grid" onWheel={handleGridWheel}>
         {MINI_APPS.map((app) => {
           const IconComponent = app.icon;
           return (

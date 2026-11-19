@@ -11,7 +11,8 @@ use media::{
 };
 use notch_window::{
     get_notch_state, position_notch_top_center, recenter_notch, set_dragging_active,
-    set_notch_collapsed_wide, set_notch_pinned, set_notch_tall, start_hover_tracker, NotchState,
+    set_notch_collapsed_wide, set_notch_mega, set_notch_pinned, set_notch_tall,
+    start_hover_tracker, NotchState,
 };
 use shelf::{
     add_paths_internal, add_shelf_paths, clear_shelf, copy_shelf_files, get_shelf_items,
@@ -97,6 +98,7 @@ pub fn run() {
             get_notch_state,
             set_notch_pinned,
             set_notch_tall,
+            set_notch_mega,
             set_notch_collapsed_wide,
             recenter_notch,
             get_media_state,

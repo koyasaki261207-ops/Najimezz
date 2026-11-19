@@ -7,13 +7,15 @@ use std::thread;
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, State, WebviewWindow};
 
-pub const WINDOW_WIDTH_LOGICAL: f64 = 540.0;
+pub const WINDOW_WIDTH_LOGICAL: f64 = 800.0;
 const COLLAPSED_HALF_WIDTH: f64 = 132.0;
 const COLLAPSED_WIDE_HALF_WIDTH: f64 = 236.0;
 const COLLAPSED_HEIGHT: f64 = 42.0;
 const EXPANDED_HALF_WIDTH: f64 = 250.0;
 const EXPANDED_HEIGHT: f64 = 196.0;
 const EXPANDED_TALL_HEIGHT: f64 = 286.0;
+const MEGA_HALF_WIDTH: f64 = 374.0;
+const MEGA_HEIGHT: f64 = 478.0;
 const COLLAPSE_DELAY_MS: u64 = 240;
 const DRAG_OUTSIDE_RESET_MS: u64 = 700;
 const POLL_INTERVAL_MS: u64 = 32;
@@ -23,6 +25,7 @@ pub struct NotchState {
     pub expanded: Arc<AtomicBool>,
     pub pinned: Arc<AtomicBool>,
     pub tall: Arc<AtomicBool>,
+    pub mega: Arc<AtomicBool>,
     pub wide_collapsed: Arc<AtomicBool>,
     pub dragging: Arc<AtomicBool>,
 }
@@ -33,6 +36,7 @@ impl Default for NotchState {
             expanded: Arc::new(AtomicBool::new(false)),
             pinned: Arc::new(AtomicBool::new(false)),
             tall: Arc::new(AtomicBool::new(false)),
+            mega: Arc::new(AtomicBool::new(false)),
             wide_collapsed: Arc::new(AtomicBool::new(false)),
             dragging: Arc::new(AtomicBool::new(false)),
         }
@@ -107,7 +111,15 @@ pub fn start_hover_tracker(app: AppHandle, state: NotchState) {
                 COLLAPSED_HALF_WIDTH
             };
 
-            let expanded_height = if state.tall.load(Ordering::Relaxed) {
+            let is_mega = state.mega.load(Ordering::Relaxed);
+            let expanded_half_width = if is_mega {
+                MEGA_HALF_WIDTH
+            } else {
+                EXPANDED_HALF_WIDTH
+            };
+            let expanded_height = if is_mega {
+                MEGA_HEIGHT
+            } else if state.tall.load(Ordering::Relaxed) {
                 EXPANDED_TALL_HEIGHT
             } else {
                 EXPANDED_HEIGHT
@@ -118,13 +130,13 @@ pub fn start_hover_tracker(app: AppHandle, state: NotchState) {
                 && rel_y >= 0.0
                 && rel_y <= COLLAPSED_HEIGHT;
 
-            let in_expanded = rel_x >= center_x - EXPANDED_HALF_WIDTH
-                && rel_x <= center_x + EXPANDED_HALF_WIDTH
+            let in_expanded = rel_x >= center_x - expanded_half_width
+                && rel_x <= center_x + expanded_half_width
                 && rel_y >= 0.0
                 && rel_y <= expanded_height;
 
-            let in_drag_safe_zone = rel_x >= center_x - (EXPANDED_HALF_WIDTH + 48.0)
-                && rel_x <= center_x + (EXPANDED_HALF_WIDTH + 48.0)
+            let in_drag_safe_zone = rel_x >= center_x - (expanded_half_width + 48.0)
+                && rel_x <= center_x + (expanded_half_width + 48.0)
                 && rel_y >= -20.0
                 && rel_y <= expanded_height + 48.0;
 
@@ -163,6 +175,9 @@ pub fn start_hover_tracker(app: AppHandle, state: NotchState) {
 
             if next_expanded != currently_expanded {
                 state.expanded.store(next_expanded, Ordering::Relaxed);
+                if !next_expanded {
+                    state.mega.store(false, Ordering::Relaxed);
+                }
                 let _ = app.emit(
                     "notch:state",
                     NotchStatePayload {
@@ -220,6 +235,11 @@ pub fn set_notch_pinned(
 #[tauri::command]
 pub fn set_notch_tall(state: State<'_, NotchState>, tall: bool) {
     state.tall.store(tall, Ordering::Relaxed);
+}
+
+#[tauri::command]
+pub fn set_notch_mega(state: State<'_, NotchState>, mega: bool) {
+    state.mega.store(mega, Ordering::Relaxed);
 }
 
 #[tauri::command]

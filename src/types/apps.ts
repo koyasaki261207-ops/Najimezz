@@ -8,6 +8,8 @@ export type MiniAppStatus = "ready" | "coming-soon";
 export interface MiniAppProps {
   onClose: () => void;
   onNotify: (message: string) => void;
+  isMega: boolean;
+  onSetMega: (mega: boolean) => void;
 }
 
 export interface MiniAppDefinition {
@@ -18,5 +20,6 @@ export interface MiniAppDefinition {
   icon: LucideIcon;
   status: MiniAppStatus;
   supportsTall?: boolean;
+  supportsMega?: boolean;
   component: ComponentType<MiniAppProps>;
 }

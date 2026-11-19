@@ -15,8 +15,8 @@
       {
         "label": "notch",
         "title": "Nusa",
-        "width": 540,
-        "height": 310,
+        "width": 800,
+        "height": 520,
         "resizable": false,
         "maximizable": false,
         "minimizable": false,
