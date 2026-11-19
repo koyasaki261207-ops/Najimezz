@@ -1,4 +1,4 @@
-import { CloudSun, Droplet, Inbox, Music, Timer } from "lucide-react";
+import { CloudSun, Droplet, Inbox, LayoutGrid, Music, Timer } from "lucide-react";
 import type { NotchPageDefinition } from "../types/notch";
 
 function MusicFallbackSlot() {
@@ -73,6 +73,22 @@ function ShelfShellPlaceholder() {
   );
 }
 
+function AppsFallbackSlot() {
+  return (
+    <div className="page-placeholder">
+      <LayoutGrid
+        size={22}
+        className="placeholder-icon"
+        style={{ color: "#6366F1" }}
+      />
+      <div className="placeholder-meta">
+        <div className="placeholder-title">Apps</div>
+        <div className="placeholder-subtitle">Mini-apps launcher</div>
+      </div>
+    </div>
+  );
+}
+
 export const NOTCH_PAGES: NotchPageDefinition[] = [
   {
     id: "music",
@@ -108,5 +124,12 @@ export const NOTCH_PAGES: NotchPageDefinition[] = [
     showHeaderTitle: true,
     accentColor: "#F59E0B",
     component: ShelfShellPlaceholder,
+  },
+  {
+    id: "apps",
+    label: "Apps",
+    showHeaderTitle: true,
+    accentColor: "#6366F1",
+    component: AppsFallbackSlot,
   },
 ];

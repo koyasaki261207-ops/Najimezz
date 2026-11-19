@@ -1,5 +1,13 @@
 import { useState } from "react";
-import { CloudSun, Droplet, Inbox, Music, Settings, Timer } from "lucide-react";
+import {
+  CloudSun,
+  Droplet,
+  Inbox,
+  LayoutGrid,
+  Music,
+  Settings,
+  Timer,
+} from "lucide-react";
 import type { NotchPageDefinition, NotchPageId } from "../types/notch";
 
 interface NotchDockProps {
@@ -21,6 +29,8 @@ function renderPageIcon(pageId: NotchPageId) {
       return <CloudSun size={14} strokeWidth={2.1} />;
     case "shelf":
       return <Inbox size={14} strokeWidth={2.1} />;
+    case "apps":
+      return <LayoutGrid size={14} strokeWidth={2.1} />;
   }
 }
 

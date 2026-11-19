@@ -1,13 +1,16 @@
 import { useCallback, useEffect, useRef, useState, type WheelEvent } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { ChevronLeft, ChevronRight, Pin } from "lucide-react";
+import { getMiniAppById } from "../apps/miniAppRegistry";
 import { useLyrics } from "../hooks/useLyrics";
 import { useMedia } from "../hooks/useMedia";
 import { useNotchWindow } from "../hooks/useNotchWindow";
 import { useShelf } from "../hooks/useShelf";
 import { useWeather } from "../hooks/useWeather";
 import { NOTCH_PAGES } from "../notch/pageRegistry";
+import type { MiniAppId } from "../types/apps";
 import type { NotchPageId } from "../types/notch";
+import { AppsPage } from "./AppsPage";
 import { MusicPage } from "./MusicPage";
 import { NotchDock } from "./NotchDock";
 import { NusaMascot } from "./NusaMascot";
@@ -44,6 +47,7 @@ export function NotchShell() {
   const shelfCtrl = useShelf();
 
   const [activeIndex, setActiveIndex] = useState(0);
+  const [activeAppId, setActiveAppId] = useState<MiniAppId | null>(null);
   const [showLyrics, setShowLyrics] = useState<boolean>(() => {
     try {
       return window.localStorage.getItem(SHOW_LYRICS_STORAGE_KEY) === "true";
@@ -58,7 +62,11 @@ export function NotchShell() {
   const ActivePageComponent = activePage.component;
   const { media } = mediaCtrl;
 
-  const isTallMode = expanded && activePage.id === "music" && showLyrics;
+  const activeMiniApp = getMiniAppById(activeAppId);
+  const isTallMode =
+    expanded &&
+    ((activePage.id === "music" && showLyrics) ||
+      (activePage.id === "apps" && Boolean(activeMiniApp?.supportsTall)));
   const showCollapsedLyrics = !expanded && showLyrics && media.hasSession;
 
   useEffect(() => {
@@ -246,6 +254,13 @@ export function NotchShell() {
                     <WeatherPage weatherCtrl={weatherCtrl} />
                   ) : activePage.id === "shelf" ? (
                     <ShelfPage onNotify={showToast} shelfCtrl={shelfCtrl} />
+                  ) : activePage.id === "apps" ? (
+                    <AppsPage
+                      activeAppId={activeAppId}
+                      onOpenApp={setActiveAppId}
+                      onCloseApp={() => setActiveAppId(null)}
+                      onNotify={showToast}
+                    />
                   ) : (
                     <ActivePageComponent />
                   )}
