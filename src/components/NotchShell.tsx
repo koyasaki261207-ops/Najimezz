@@ -1,8 +1,12 @@
-import { useCallback, useState, type WheelEvent } from "react";
+import { useCallback, useEffect, useState, type WheelEvent } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { ChevronLeft, ChevronRight, Pin } from "lucide-react";
+import { useLyrics } from "../hooks/useLyrics";
+import { useMedia } from "../hooks/useMedia";
 import { useNotchWindow } from "../hooks/useNotchWindow";
 import { NOTCH_PAGES } from "../notch/pageRegistry";
 import type { NotchPageId } from "../types/notch";
+import { MusicPage } from "./MusicPage";
 import { NotchDock } from "./NotchDock";
 import { NusaMascot } from "./NusaMascot";
 import { StatusBar } from "./StatusBar";
@@ -27,15 +31,28 @@ function NotchEar({ side }: { side: "left" | "right" }) {
 }
 
 export function NotchShell() {
-  const { expanded, pinned, togglePinned, setBrowserHover } = useNotchWindow();
+  const { expanded, pinned, isTauri, togglePinned, setBrowserHover } =
+    useNotchWindow();
+  const mediaCtrl = useMedia();
+  const lyricsCtrl = useLyrics(mediaCtrl.media, mediaCtrl.positionMs);
+
   const [activeIndex, setActiveIndex] = useState(0);
+  const [showLyrics, setShowLyrics] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const activePage = NOTCH_PAGES[activeIndex];
   const ActivePageComponent = activePage.component;
+  const isTallMode = expanded && activePage.id === "music" && showLyrics;
+
+  useEffect(() => {
+    if (!isTauri) return;
+    invoke("set_notch_tall", { tall: isTallMode }).catch(() => {});
+  }, [isTallMode, isTauri]);
 
   const stepPage = useCallback((delta: number) => {
-    setActiveIndex((prev) => (prev + delta + NOTCH_PAGES.length) % NOTCH_PAGES.length);
+    setActiveIndex(
+      (prev) => (prev + delta + NOTCH_PAGES.length) % NOTCH_PAGES.length
+    );
   }, []);
 
   const handleSelectPage = useCallback((pageId: NotchPageId) => {
@@ -49,7 +66,10 @@ export function NotchShell() {
     (event: WheelEvent<HTMLDivElement>) => {
       if (!expanded) return;
       if (Math.abs(event.deltaY) < 12 && Math.abs(event.deltaX) < 12) return;
-      const dominant = Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
+      const dominant =
+        Math.abs(event.deltaX) > Math.abs(event.deltaY)
+          ? event.deltaX
+          : event.deltaY;
       stepPage(dominant > 0 ? 1 : -1);
     },
     [expanded, stepPage]
@@ -64,10 +84,18 @@ export function NotchShell() {
     }, 1800);
   }, []);
 
+  const { media } = mediaCtrl;
+
   return (
     <div className="notch-viewport">
       <div
-        className={`notch-frame ${expanded ? "is-expanded" : "is-collapsed"}`}
+        className={`notch-frame ${
+          expanded
+            ? isTallMode
+              ? "is-expanded is-tall"
+              : "is-expanded"
+            : "is-collapsed"
+        }`}
         onMouseEnter={() => setBrowserHover(true)}
         onMouseLeave={() => setBrowserHover(false)}
         onWheel={handleWheel}
@@ -79,7 +107,22 @@ export function NotchShell() {
           {!expanded ? (
             <div className="notch-collapsed-bar">
               <div className="collapsed-left">
-                <NusaMascot size={20} />
+                {media.hasSession && media.thumbnail ? (
+                  <img
+                    className="collapsed-cover"
+                    src={media.thumbnail}
+                    alt={media.title}
+                  />
+                ) : (
+                  <NusaMascot size={20} />
+                )}
+                {media.hasSession && media.isPlaying && (
+                  <div className="collapsed-eq" aria-hidden="true">
+                    <span />
+                    <span />
+                    <span />
+                  </div>
+                )}
               </div>
               <div className="collapsed-right">
                 <StatusBar compact />
@@ -90,7 +133,9 @@ export function NotchShell() {
               <header className="notch-header">
                 <div className="notch-header-left">
                   {activePage.showHeaderTitle && (
-                    <span className="notch-page-title">{activePage.label}</span>
+                    <span className="notch-page-title">
+                      {activePage.label}
+                    </span>
                   )}
                 </div>
 
@@ -122,7 +167,18 @@ export function NotchShell() {
                 </button>
 
                 <main className="notch-page-stage">
-                  <ActivePageComponent />
+                  {activePage.id === "music" ? (
+                    <MusicPage
+                      mediaCtrl={mediaCtrl}
+                      lyricsCtrl={lyricsCtrl}
+                      showLyrics={showLyrics}
+                      onToggleLyrics={() =>
+                        setShowLyrics((prev) => !prev)
+                      }
+                    />
+                  ) : (
+                    <ActivePageComponent />
+                  )}
                 </main>
 
                 <button
@@ -135,7 +191,9 @@ export function NotchShell() {
                 </button>
               </div>
 
-              {toastMessage && <div className="notch-toast">{toastMessage}</div>}
+              {toastMessage && (
+                <div className="notch-toast">{toastMessage}</div>
+              )}
 
               <NotchDock
                 pages={NOTCH_PAGES}

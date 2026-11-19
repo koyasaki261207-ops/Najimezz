@@ -1,7 +1,7 @@
 import { Droplet, Inbox, Music, Timer } from "lucide-react";
 import type { NotchPageDefinition } from "../types/notch";
 
-function MusicShellPlaceholder() {
+function MusicFallbackSlot() {
   return (
     <div className="page-placeholder page-placeholder-music">
       <div className="music-cover-stub">
@@ -9,7 +9,7 @@ function MusicShellPlaceholder() {
       </div>
       <div className="placeholder-meta">
         <div className="placeholder-title">Not Playing</div>
-        <div className="placeholder-subtitle">Music &amp; SMTC module slot ready</div>
+        <div className="placeholder-subtitle">Music &amp; SMTC module</div>
       </div>
     </div>
   );
@@ -18,10 +18,16 @@ function MusicShellPlaceholder() {
 function PomodoroShellPlaceholder() {
   return (
     <div className="page-placeholder">
-      <Timer size={22} className="placeholder-icon" style={{ color: "#8B5CF6" }} />
+      <Timer
+        size={22}
+        className="placeholder-icon"
+        style={{ color: "#8B5CF6" }}
+      />
       <div className="placeholder-meta">
         <div className="placeholder-title">25:00 · Ready</div>
-        <div className="placeholder-subtitle">Pomodoro timer module slot ready</div>
+        <div className="placeholder-subtitle">
+          Pomodoro timer module slot ready
+        </div>
       </div>
     </div>
   );
@@ -30,10 +36,16 @@ function PomodoroShellPlaceholder() {
 function WaterShellPlaceholder() {
   return (
     <div className="page-placeholder">
-      <Droplet size={22} className="placeholder-icon" style={{ color: "#38BDF8" }} />
+      <Droplet
+        size={22}
+        className="placeholder-icon"
+        style={{ color: "#38BDF8" }}
+      />
       <div className="placeholder-meta">
         <div className="placeholder-title">Hydration Tracker</div>
-        <div className="placeholder-subtitle">Water reminder module slot ready</div>
+        <div className="placeholder-subtitle">
+          Water reminder module slot ready
+        </div>
       </div>
     </div>
   );
@@ -55,7 +67,7 @@ export const NOTCH_PAGES: NotchPageDefinition[] = [
     label: "Music",
     showHeaderTitle: false,
     accentColor: "#FF3B5C",
-    component: MusicShellPlaceholder,
+    component: MusicFallbackSlot,
   },
   {
     id: "pomodoro",

@@ -59,6 +59,10 @@ if ($Mode -eq "release") {
     if ((Test-Path $localDesktop) -and ($localDesktop -ne $desktopDir)) {
         $desktopDirs += $localDesktop
     }
+    $publicDesktop = [Environment]::GetFolderPath("CommonDesktopDirectory")
+    if ((Test-Path $publicDesktop) -and ($publicDesktop -notin $desktopDirs)) {
+        $desktopDirs += $publicDesktop
+    }
 
     foreach ($dir in $desktopDirs) {
         $shortcutPath = Join-Path $dir "$ShortcutName.lnk"
@@ -85,6 +89,10 @@ if ($Mode -eq "release") {
     if ((Test-Path $localDesktop) -and ($localDesktop -ne $desktopDir)) {
         $desktopDirs += $localDesktop
     }
+    $publicDesktop = [Environment]::GetFolderPath("CommonDesktopDirectory")
+    if ((Test-Path $publicDesktop) -and ($publicDesktop -notin $desktopDirs)) {
+        $desktopDirs += $publicDesktop
+    }
 
     foreach ($dir in $desktopDirs) {
         $shortcutPath = Join-Path $dir "$ShortcutName (Dev).lnk"
@@ -100,4 +108,18 @@ if ($Mode -eq "release") {
         Write-Host "Created Desktop shortcut (Dev): $shortcutPath"
     }
     Write-Host "Target: $wscriptExe `"$vbsPath`""
+}
+
+try {
+    Add-Type -TypeDefinition @"
+    using System;
+    using System.Runtime.InteropServices;
+    public class ShellNotifier {
+        [DllImport("shell32.dll")]
+        public static extern void SHChangeNotify(int wEventId, uint uFlags, IntPtr dwItem1, IntPtr dwItem2);
+    }
+"@ -ErrorAction SilentlyContinue
+    [ShellNotifier]::SHChangeNotify(0x08000000, 0x0000, [IntPtr]::Zero, [IntPtr]::Zero)
+} catch {
+    # Non-critical shell refresh
 }

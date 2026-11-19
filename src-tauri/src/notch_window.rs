@@ -8,10 +8,11 @@ use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, State, WebviewWindow};
 
 pub const WINDOW_WIDTH_LOGICAL: f64 = 540.0;
-const COLLAPSED_HALF_WIDTH: f64 = 122.0;
+const COLLAPSED_HALF_WIDTH: f64 = 132.0;
 const COLLAPSED_HEIGHT: f64 = 40.0;
 const EXPANDED_HALF_WIDTH: f64 = 250.0;
 const EXPANDED_HEIGHT: f64 = 196.0;
+const EXPANDED_TALL_HEIGHT: f64 = 286.0;
 const COLLAPSE_DELAY_MS: u64 = 240;
 const POLL_INTERVAL_MS: u64 = 32;
 
@@ -19,6 +20,7 @@ const POLL_INTERVAL_MS: u64 = 32;
 pub struct NotchState {
     pub expanded: Arc<AtomicBool>,
     pub pinned: Arc<AtomicBool>,
+    pub tall: Arc<AtomicBool>,
 }
 
 impl Default for NotchState {
@@ -26,6 +28,7 @@ impl Default for NotchState {
         Self {
             expanded: Arc::new(AtomicBool::new(false)),
             pinned: Arc::new(AtomicBool::new(false)),
+            tall: Arc::new(AtomicBool::new(false)),
         }
     }
 }
@@ -72,6 +75,12 @@ pub fn start_hover_tracker(app: AppHandle, state: NotchState) {
             let rel_y = (cursor.y - outer_pos.y as f64) / scale;
             let center_x = WINDOW_WIDTH_LOGICAL / 2.0;
 
+            let expanded_height = if state.tall.load(Ordering::Relaxed) {
+                EXPANDED_TALL_HEIGHT
+            } else {
+                EXPANDED_HEIGHT
+            };
+
             let in_collapsed = rel_x >= center_x - COLLAPSED_HALF_WIDTH
                 && rel_x <= center_x + COLLAPSED_HALF_WIDTH
                 && rel_y >= 0.0
@@ -80,7 +89,7 @@ pub fn start_hover_tracker(app: AppHandle, state: NotchState) {
             let in_expanded = rel_x >= center_x - EXPANDED_HALF_WIDTH
                 && rel_x <= center_x + EXPANDED_HALF_WIDTH
                 && rel_y >= 0.0
-                && rel_y <= EXPANDED_HEIGHT;
+                && rel_y <= expanded_height;
 
             let currently_expanded = state.expanded.load(Ordering::Relaxed);
             let pinned = state.pinned.load(Ordering::Relaxed);
@@ -151,6 +160,11 @@ pub fn set_notch_pinned(
     app.emit("notch:state", payload.clone())
         .map_err(|e| e.to_string())?;
     Ok(payload)
+}
+
+#[tauri::command]
+pub fn set_notch_tall(state: State<'_, NotchState>, tall: bool) {
+    state.tall.store(tall, Ordering::Relaxed);
 }
 
 #[tauri::command]
