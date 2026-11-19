@@ -1,0 +1,18 @@
+[package]
+name = "nusa"
+version = "2.1.0"
+description = "Nusa 2.1 Floating Notch Clone built with Tauri v2 and React"
+authors = ["Nusa Clone"]
+edition = "2021"
+
+[lib]
+name = "nusa_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["macos-private-api"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
