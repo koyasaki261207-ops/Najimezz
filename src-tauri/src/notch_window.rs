@@ -8,9 +8,10 @@ use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, State, WebviewWindow};
 
 pub const WINDOW_WIDTH_LOGICAL: f64 = 800.0;
-const COLLAPSED_HALF_WIDTH: f64 = 132.0;
+const HIDDEN_BAR_HALF_WIDTH: f64 = 84.0;
+const HIDDEN_BAR_HEIGHT: f64 = 12.0;
 const COLLAPSED_WIDE_HALF_WIDTH: f64 = 236.0;
-const COLLAPSED_HEIGHT: f64 = 42.0;
+const COLLAPSED_LYRICS_HEIGHT: f64 = 42.0;
 const EXPANDED_HALF_WIDTH: f64 = 250.0;
 const EXPANDED_HEIGHT: f64 = 196.0;
 const EXPANDED_TALL_HEIGHT: f64 = 286.0;
@@ -107,10 +108,11 @@ pub fn start_hover_tracker(app: AppHandle, state: NotchState) {
             let rel_y = (cursor.y - outer_pos.y as f64) / scale;
             let center_x = WINDOW_WIDTH_LOGICAL / 2.0;
 
-            let collapsed_half_width = if state.wide_collapsed.load(Ordering::Relaxed) {
-                COLLAPSED_WIDE_HALF_WIDTH
+            let is_wide_collapsed = state.wide_collapsed.load(Ordering::Relaxed);
+            let (collapsed_half_width, collapsed_height) = if is_wide_collapsed {
+                (COLLAPSED_WIDE_HALF_WIDTH, COLLAPSED_LYRICS_HEIGHT)
             } else {
-                COLLAPSED_HALF_WIDTH
+                (HIDDEN_BAR_HALF_WIDTH, HIDDEN_BAR_HEIGHT)
             };
 
             let is_mega = state.mega.load(Ordering::Relaxed);
@@ -130,7 +132,7 @@ pub fn start_hover_tracker(app: AppHandle, state: NotchState) {
             let in_collapsed = rel_x >= center_x - collapsed_half_width
                 && rel_x <= center_x + collapsed_half_width
                 && rel_y >= 0.0
-                && rel_y <= COLLAPSED_HEIGHT;
+                && rel_y <= collapsed_height;
 
             let in_expanded = rel_x >= center_x - expanded_half_width
                 && rel_x <= center_x + expanded_half_width

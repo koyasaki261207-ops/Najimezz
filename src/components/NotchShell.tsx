@@ -74,7 +74,8 @@ export function NotchShell() {
     !isMegaMode &&
     ((activePage.id === "music" && showLyrics) ||
       (activePage.id === "apps" && Boolean(activeMiniApp?.supportsTall)));
-  const showCollapsedLyrics = !expanded && showLyrics && media.hasSession;
+  const showCollapsedLyrics = !expanded && !pinned && showLyrics && media.hasSession;
+  const isHiddenTopBar = !expanded && !pinned && !showCollapsedLyrics;
 
   useEffect(() => {
     if (!expanded || activePage.id !== "apps" || !activeAppId) {
@@ -180,7 +181,7 @@ export function NotchShell() {
         : "is-expanded"
     : showCollapsedLyrics
       ? "is-collapsed is-collapsed-lyrics"
-      : "is-collapsed";
+      : "is-collapsed is-hidden-bar";
 
   const isLyricMuted =
     lyricsCtrl.loading ||
@@ -201,27 +202,34 @@ export function NotchShell() {
 
         <div className="notch-surface">
           {!expanded ? (
-            <div className={`notch-collapsed-bar ${showCollapsedLyrics ? "has-lyrics" : ""}`}>
-              <div className="collapsed-left">
-                {media.hasSession && media.thumbnail ? (
-                  <img
-                    className="collapsed-cover"
-                    src={media.thumbnail}
-                    alt={media.title}
-                  />
-                ) : (
-                  <NusaMascot size={20} />
-                )}
+            isHiddenTopBar ? (
+              <div className="notch-hidden-bar" aria-label="Hover to open Nusa">
                 {media.hasSession && media.isPlaying && (
-                  <div className="collapsed-eq" aria-hidden="true">
-                    <span />
-                    <span />
-                    <span />
-                  </div>
+                  <span className="hidden-bar-music-dot" aria-hidden="true" />
                 )}
+                <span className="hidden-bar-pill" aria-hidden="true" />
               </div>
+            ) : (
+              <div className="notch-collapsed-bar has-lyrics">
+                <div className="collapsed-left">
+                  {media.hasSession && media.thumbnail ? (
+                    <img
+                      className="collapsed-cover"
+                      src={media.thumbnail}
+                      alt={media.title}
+                    />
+                  ) : (
+                    <NusaMascot size={20} />
+                  )}
+                  {media.hasSession && media.isPlaying && (
+                    <div className="collapsed-eq" aria-hidden="true">
+                      <span />
+                      <span />
+                      <span />
+                    </div>
+                  )}
+                </div>
 
-              {showCollapsedLyrics && (
                 <div className="collapsed-lyric-slot" title={lyricsCtrl.currentLineText}>
                   <span
                     key={lyricsCtrl.currentLineKey}
@@ -230,12 +238,12 @@ export function NotchShell() {
                     {lyricsCtrl.currentLineText}
                   </span>
                 </div>
-              )}
 
-              <div className="collapsed-right">
-                <StatusBar compact />
+                <div className="collapsed-right">
+                  <StatusBar compact />
+                </div>
               </div>
-            </div>
+            )
           ) : (
             <div className="notch-expanded-layout">
               <header className="notch-header">
@@ -275,10 +283,10 @@ export function NotchShell() {
                 <main className="notch-page-stage">
                   {activePage.id === "music" ? (
                     <MusicPage
-                      mediaCtrl={mediaCtrl}
                       lyricsCtrl={lyricsCtrl}
-                      showLyrics={showLyrics}
+                      mediaCtrl={mediaCtrl}
                       onToggleLyrics={handleToggleLyrics}
+                      showLyrics={showLyrics}
                     />
                   ) : activePage.id === "weather" ? (
                     <WeatherPage weatherCtrl={weatherCtrl} />
@@ -311,10 +319,10 @@ export function NotchShell() {
               {toastMessage && <div className="notch-toast">{toastMessage}</div>}
 
               <NotchDock
-                pages={NOTCH_PAGES}
                 activePageId={activePage.id}
                 onOpenSettings={handleOpenSettings}
                 onSelectPage={handleSelectPage}
+                pages={NOTCH_PAGES}
               />
             </div>
           )}

@@ -2865,3 +2865,67 @@ body,
   opacity: 0.38;
   cursor: default;
 }
+
+/* Auto-hide minimal top edge bar when not pinned and lyrics are off */
+.notch-ear {
+  transition:
+    opacity 180ms ease,
+    transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
+  transform-origin: top center;
+}
+
+.notch-frame.is-collapsed.is-hidden-bar {
+  width: 136px;
+  height: 7px;
+}
+
+.notch-frame.is-collapsed.is-hidden-bar .notch-ear {
+  opacity: 0;
+  transform: scaleY(0);
+}
+
+.notch-frame.is-collapsed.is-hidden-bar .notch-surface {
+  border-bottom-left-radius: 7px;
+  border-bottom-right-radius: 7px;
+  background: rgba(0, 0, 0, 0.94);
+  box-shadow:
+    0 2px 8px rgba(0, 0, 0, 0.42),
+    0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+.notch-hidden-bar {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.hidden-bar-pill {
+  width: 44px;
+  height: 2.5px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.34);
+}
+
+.hidden-bar-music-dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 999px;
+  background: #17e466;
+  box-shadow: 0 0 6px rgba(23, 228, 102, 0.85);
+  animation: hidden-dot-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes hidden-dot-pulse {
+  0%,
+  100% {
+    opacity: 0.45;
+    transform: scale(0.85);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.1);
+  }
+}
