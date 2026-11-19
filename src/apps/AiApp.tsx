@@ -87,7 +87,11 @@ export function AiApp({ onNotify, isMega, onSetMega }: MiniAppProps) {
     const nextWeb = !config.webSearch;
     updateSettings(config.model, config.thinkingLevel, nextWeb)
       .then(() => {
-        onNotify(nextWeb ? "Đã bật tìm kiếm web" : "Đã tắt tìm kiếm web");
+        onNotify(
+          nextWeb
+            ? "Đã bật tìm kiếm web miễn phí (DuckDuckGo)"
+            : "Đã tắt tìm kiếm web"
+        );
       })
       .catch(() => {
         onNotify("Không cập nhật được tìm kiếm web");
@@ -178,8 +182,8 @@ export function AiApp({ onNotify, isMega, onSetMega }: MiniAppProps) {
           <select
             className="ai-select"
             value={config.model}
-            aria-label="Chọn model Gemini 4"
-            title="Chọn model Gemini 4"
+            aria-label="Chọn model Gemini"
+            title="Chọn model Gemini"
             onFocus={() => setInputFocused(true)}
             onBlur={() => setInputFocused(false)}
             onChange={(e) => handleModelChange(e.target.value as AiModelId)}
@@ -214,12 +218,12 @@ export function AiApp({ onNotify, isMega, onSetMega }: MiniAppProps) {
             className={`ai-pill-btn ${config.webSearch ? "is-active" : ""}`}
             title={
               config.webSearch
-                ? "Đang bật Google Search Grounding"
+                ? "Đang bật tìm kiếm web miễn phí (DuckDuckGo qua Rust)"
                 : "Đang tắt tìm kiếm web"
             }
             onClick={handleToggleWebSearch}
           >
-            <Globe size={11} strokeWidth={2.2}/>
+            <Globe size={11} strokeWidth={2.2} />
             <span>Web</span>
           </button>
         </div>
@@ -238,7 +242,7 @@ export function AiApp({ onNotify, isMega, onSetMega }: MiniAppProps) {
             aria-label="Cấu hình Gemini API Key"
             onClick={() => setShowKeyPanel((prev) => !prev)}
           >
-            <KeyRound size={12} strokeWidth={2.2}/>
+            <KeyRound size={12} strokeWidth={2.2} />
           </button>
 
           {messages.length > 0 && (
@@ -249,7 +253,7 @@ export function AiApp({ onNotify, isMega, onSetMega }: MiniAppProps) {
               aria-label="Xóa đoạn hội thoại"
               onClick={clearMessages}
             >
-              <Trash2 size={12} strokeWidth={2.2}/>
+              <Trash2 size={12} strokeWidth={2.2} />
             </button>
           )}
 
@@ -261,9 +265,9 @@ export function AiApp({ onNotify, isMega, onSetMega }: MiniAppProps) {
             onClick={() => onSetMega(!isMega)}
           >
             {isMega ? (
-              <Minimize2 size={12} strokeWidth={2.2}/>
+              <Minimize2 size={12} strokeWidth={2.2} />
             ) : (
-              <Maximize2 size={12} strokeWidth={2.2}/>
+              <Maximize2 size={12} strokeWidth={2.2} />
             )}
           </button>
         </div>
@@ -273,7 +277,7 @@ export function AiApp({ onNotify, isMega, onSetMega }: MiniAppProps) {
         <div className="ai-key-panel">
           <div className="ai-key-header">
             <div className="ai-key-title">
-              <KeyRound size={13} strokeWidth={2.2}/>
+              <KeyRound size={13} strokeWidth={2.2} />
               <span>Gemini API Key (Lưu cục bộ tại Rust)</span>
             </div>
             {config.hasApiKey && (
@@ -283,7 +287,7 @@ export function AiApp({ onNotify, isMega, onSetMega }: MiniAppProps) {
                 aria-label="Đóng bảng API key"
                 onClick={() => setShowKeyPanel(false)}
               >
-                <X size={12} strokeWidth={2.4}/>
+                <X size={12} strokeWidth={2.4} />
               </button>
             )}
           </div>
@@ -329,7 +333,9 @@ export function AiApp({ onNotify, isMega, onSetMega }: MiniAppProps) {
           </form>
 
           <div className="ai-key-note">
-            Mặc định chạy <strong>gemini-4-hydrogen</strong> (hỗ trợ cả gói Free). Key được lưu trong thư mục AppData phía Rust, không lộ sang trình duyệt.
+            Mặc định chạy <strong>gemini-4-hydrogen</strong> (có thêm{" "}
+            <strong>gemini-2.5-flash</strong> dự phòng Free) và tìm kiếm web
+            miễn phí qua Rust mà không tốn hạn mức Google Search Grounding.
           </div>
         </div>
       ) : (
@@ -341,7 +347,7 @@ export function AiApp({ onNotify, isMega, onSetMega }: MiniAppProps) {
             {messages.length === 0 ? (
               <div className="ai-empty-state">
                 <div className="ai-empty-hero">
-                  <Sparkles color="#38BDF8" size={15} strokeWidth={2.1}/>
+                  <Sparkles color="#38BDF8" size={15} strokeWidth={2.1} />
                   <span>{selectedModelMeta.label} sẵn sàng</span>
                 </div>
                 <div className="ai-quick-prompts">
@@ -387,7 +393,7 @@ export function AiApp({ onNotify, isMega, onSetMega }: MiniAppProps) {
                                 });
                               }}
                             >
-                              <ExternalLink size={9} strokeWidth={2.2}/>
+                              <ExternalLink size={9} strokeWidth={2.2} />
                               <span>{src.title}</span>
                             </button>
                           ))}
@@ -410,9 +416,9 @@ export function AiApp({ onNotify, isMega, onSetMega }: MiniAppProps) {
                             onClick={() => handleCopyReply(msg.id, msg.text)}
                           >
                             {copiedMsgId === msg.id ? (
-                              <Check size={10} strokeWidth={2.4}/>
+                              <Check size={10} strokeWidth={2.4} />
                             ) : (
-                              <Copy size={10} strokeWidth={2.2}/>
+                              <Copy size={10} strokeWidth={2.2} />
                             )}
                           </button>
                         </div>
@@ -427,7 +433,7 @@ export function AiApp({ onNotify, isMega, onSetMega }: MiniAppProps) {
                       <span className="ai-dot-pulse" />
                       <span>
                         {config.webSearch
-                          ? "Đang tìm kiếm & suy luận..."
+                          ? "Đang tìm web miễn phí & suy luận..."
                           : "Đang suy luận..."}
                       </span>
                     </div>
@@ -445,8 +451,8 @@ export function AiApp({ onNotify, isMega, onSetMega }: MiniAppProps) {
               className="ai-input"
               placeholder={
                 config.webSearch
-                  ? "Hỏi Gemini 4 (có tìm kiếm web)..."
-                  : "Hỏi Gemini 4..."
+                  ? `Hỏi ${selectedModelMeta.shortLabel} (Web miễn phí)...`
+                  : `Hỏi ${selectedModelMeta.shortLabel}...`
               }
               value={promptInput}
               disabled={sending}
@@ -465,7 +471,7 @@ export function AiApp({ onNotify, isMega, onSetMega }: MiniAppProps) {
               aria-label="Gửi câu hỏi"
               title="Gửi (Enter)"
             >
-              <SendHorizontal size={13} strokeWidth={2.3}/>
+              <SendHorizontal size={13} strokeWidth={2.3} />
             </button>
           </form>
         </>

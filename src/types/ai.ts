@@ -1,5 +1,6 @@
 export type AiModelId =
   | "gemini-4-hydrogen"
+  | "gemini-2.5-flash"
   | "gemini-4-neon"
   | "gemini-4-carbon"
   | "gemini-4-argon";
@@ -54,6 +55,13 @@ export const AI_MODEL_OPTIONS: AiModelOption[] = [
     label: "Gemini 4 Hydrogen",
     tierNote: "Free & Paid",
     supportsXHigh: true,
+  },
+  {
+    id: "gemini-2.5-flash",
+    shortLabel: "2.5 Flash",
+    label: "Gemini 2.5 Flash",
+    tierNote: "Free & Paid",
+    supportsXHigh: false,
   },
   {
     id: "gemini-4-neon",
