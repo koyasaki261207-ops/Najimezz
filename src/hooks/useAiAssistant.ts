@@ -9,6 +9,14 @@ import type {
   ThinkingLevel,
 } from "../types/ai";
 
+interface StreamDeltaPayload {
+  delta: string;
+}
+
+interface StreamStatusPayload {
+  label: string;
+}
+
 function isTauriRuntime(): boolean {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 }
@@ -23,9 +31,13 @@ function createMessageId(): string {
 const DEFAULT_CONFIG: AiConfigView = {
   hasApiKey: false,
   maskedKey: null,
-  model: "gemini-4-hydrogen",
-  thinkingLevel: "low",
+  model: "auto",
+  resolvedModel: null,
+  availableModels: [],
+  thinkingLevel: "off",
   webSearch: true,
+  allowScreenCapture: true,
+  allowPcControl: true,
 };
 
 export interface UseAiAssistantResult {
@@ -33,19 +45,30 @@ export interface UseAiAssistantResult {
   configLoaded: boolean;
   messages: AiMessage[];
   sending: boolean;
+  streamingText: string;
+  streamStatus: string | null;
   savingKey: boolean;
+  refreshingModels: boolean;
   setInputFocused: (focused: boolean) => void;
   focusWindow: () => void;
   openAiSettings: () => void;
   dismissAskNusa: () => void;
   saveApiKey: (apiKey: string) => Promise<void>;
   clearApiKey: () => Promise<void>;
+  refreshModels: () => Promise<void>;
   updateSettings: (
     model: AiModelId,
     thinkingLevel: ThinkingLevel,
-    webSearch: boolean
+    webSearch: boolean,
+    allowScreenCapture?: boolean,
+    allowPcControl?: boolean
   ) => Promise<void>;
   sendMessage: (promptText: string) => Promise<void>;
+  resolvePendingCommand: (
+    messageId: string,
+    commandId: string,
+    approved: boolean
+  ) => Promise<void>;
   clearMessages: () => void;
   openSourceUrl: (url: string) => Promise<void>;
 }
@@ -56,13 +79,23 @@ export function useAiAssistant(): UseAiAssistantResult {
   const [configLoaded, setConfigLoaded] = useState(!tauri);
   const [messages, setMessages] = useState<AiMessage[]>([]);
   const [sending, setSending] = useState(false);
+  const [streamingText, setStreamingText] = useState("");
+  const [streamStatus, setStreamStatus] = useState<string | null>(null);
   const [savingKey, setSavingKey] = useState(false);
+  const [refreshingModels, setRefreshingModels] = useState(false);
   const [inputFocused, setInputFocused] = useState(false);
+
+  const hasPendingCommand = messages.some(
+    (m) => m.pendingCommand && m.commandStatus === "pending"
+  );
 
   useEffect(() => {
     if (!tauri) return;
 
     let unlistenConfig: (() => void) | undefined;
+    let unlistenDelta: (() => void) | undefined;
+    let unlistenReset: (() => void) | undefined;
+    let unlistenStatus: (() => void) | undefined;
 
     invoke<AiConfigView>("get_ai_config")
       .then((loaded) => {
@@ -82,18 +115,47 @@ export function useAiAssistant(): UseAiAssistantResult {
       })
       .catch(() => {});
 
-    return () => {
-      if (unlistenConfig) {
-        unlistenConfig();
+    listen<StreamDeltaPayload>("ai:stream-delta", (event) => {
+      if (!event.payload?.delta) return;
+      setStreamStatus(null);
+      setStreamingText((prev) => prev + event.payload.delta);
+    })
+      .then((fn) => {
+        unlistenDelta = fn;
+      })
+      .catch(() => {});
+
+    listen("ai:stream-reset", () => {
+      setStreamingText("");
+    })
+      .then((fn) => {
+        unlistenReset = fn;
+      })
+      .catch(() => {});
+
+    listen<StreamStatusPayload>("ai:stream-status", (event) => {
+      if (event.payload?.label) {
+        setStreamStatus(event.payload.label);
       }
+    })
+      .then((fn) => {
+        unlistenStatus = fn;
+      })
+      .catch(() => {});
+
+    return () => {
+      unlistenConfig?.();
+      unlistenDelta?.();
+      unlistenReset?.();
+      unlistenStatus?.();
     };
   }, [tauri]);
 
   useEffect(() => {
     if (!tauri) return;
-    const locked = inputFocused || sending;
+    const locked = inputFocused || sending || hasPendingCommand;
     invoke("set_notch_input_lock", { locked }).catch(() => {});
-  }, [inputFocused, sending, tauri]);
+  }, [inputFocused, sending, hasPendingCommand, tauri]);
 
   useEffect(() => {
     if (!tauri) return;
@@ -166,22 +228,40 @@ export function useAiAssistant(): UseAiAssistantResult {
     }
   }, [tauri]);
 
+  const refreshModels = useCallback(async () => {
+    if (!tauri) return;
+    setRefreshingModels(true);
+    try {
+      const updated = await invoke<AiConfigView>("refresh_ai_models");
+      setConfig(updated);
+    } finally {
+      setRefreshingModels(false);
+    }
+  }, [tauri]);
+
   const updateSettings = useCallback(
     async (
       model: AiModelId,
       thinkingLevel: ThinkingLevel,
-      webSearch: boolean
+      webSearch: boolean,
+      allowScreenCapture?: boolean,
+      allowPcControl?: boolean
     ) => {
       const normalizedLevel: ThinkingLevel =
         thinkingLevel === "xhigh" && model !== "gemini-4-hydrogen"
           ? "high"
           : thinkingLevel;
 
+      const nextScreen = allowScreenCapture ?? config.allowScreenCapture;
+      const nextPc = allowPcControl ?? config.allowPcControl;
+
       setConfig((prev) => ({
         ...prev,
         model,
         thinkingLevel: normalizedLevel,
         webSearch,
+        allowScreenCapture: nextScreen,
+        allowPcControl: nextPc,
       }));
 
       if (!tauri) return;
@@ -190,11 +270,32 @@ export function useAiAssistant(): UseAiAssistantResult {
         model,
         thinkingLevel: normalizedLevel,
         webSearch,
+        allowScreenCapture: nextScreen,
+        allowPcControl: nextPc,
       });
       setConfig(updated);
     },
-    [tauri]
+    [config.allowPcControl, config.allowScreenCapture, tauri]
   );
+
+  const appendReplyMessage = useCallback((reply: AiReplyPayload) => {
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: createMessageId(),
+        role: "model",
+        text: reply.text,
+        sources: reply.sources,
+        searchQueries: reply.searchQueries,
+        actionsTaken: reply.actionsTaken,
+        pendingCommand: reply.pendingCommand ?? undefined,
+        commandStatus: reply.pendingCommand ? "pending" : undefined,
+        model: reply.model,
+        thinkingLevel: reply.thinkingLevel,
+        createdAtMs: Date.now(),
+      },
+    ]);
+  }, []);
 
   const sendMessage = useCallback(
     async (promptText: string) => {
@@ -216,18 +317,27 @@ export function useAiAssistant(): UseAiAssistantResult {
         text: m.text,
       }));
 
-      setMessages((prev) => [...prev, userMsg]);
+      setMessages((prev) => [
+        ...prev.map((m) =>
+          m.commandStatus === "pending"
+            ? { ...m, commandStatus: "rejected" as const }
+            : m
+        ),
+        userMsg,
+      ]);
+      setStreamingText("");
+      setStreamStatus(null);
       setSending(true);
 
       try {
         if (!tauri) {
-          await new Promise((resolve) => window.setTimeout(resolve, 400));
+          await new Promise((resolve) => window.setTimeout(resolve, 350));
           setMessages((prev) => [
             ...prev,
             {
               id: createMessageId(),
               role: "model",
-              text: "Chế độ xem trước trình duyệt: hãy chạy bản Tauri để gọi trực tiếp Gemini API từ Rust.",
+              text: "Chế độ xem trước trình duyệt: hãy chạy bản Tauri để dùng đầy đủ trợ lý AI & thao tác máy tính.",
               model: config.model,
               thinkingLevel: config.thinkingLevel,
               createdAtMs: Date.now(),
@@ -243,19 +353,7 @@ export function useAiAssistant(): UseAiAssistantResult {
           webSearch: config.webSearch,
         });
 
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: createMessageId(),
-            role: "model",
-            text: reply.text,
-            sources: reply.sources,
-            searchQueries: reply.searchQueries,
-            model: reply.model,
-            thinkingLevel: reply.thinkingLevel,
-            createdAtMs: Date.now(),
-          },
-        ]);
+        appendReplyMessage(reply);
       } catch (err) {
         const errorText =
           typeof err === "string"
@@ -274,14 +372,74 @@ export function useAiAssistant(): UseAiAssistantResult {
           },
         ]);
       } finally {
+        setStreamingText("");
+        setStreamStatus(null);
         setSending(false);
       }
     },
-    [config.model, config.thinkingLevel, config.webSearch, messages, sending, tauri]
+    [
+      appendReplyMessage,
+      config.model,
+      config.thinkingLevel,
+      config.webSearch,
+      messages,
+      sending,
+      tauri,
+    ]
+  );
+
+  const resolvePendingCommand = useCallback(
+    async (messageId: string, commandId: string, approved: boolean) => {
+      if (sending) return;
+
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === messageId
+            ? { ...m, commandStatus: approved ? "approved" : "rejected" }
+            : m
+        )
+      );
+      setStreamingText("");
+      setStreamStatus(null);
+      setSending(true);
+
+      try {
+        if (!tauri) return;
+        const reply = await invoke<AiReplyPayload>("ai_resolve_pending_command", {
+          commandId,
+          approved,
+        });
+        appendReplyMessage(reply);
+      } catch (err) {
+        const errorText =
+          typeof err === "string"
+            ? err
+            : err instanceof Error
+              ? err.message
+              : "Không thể hoàn tất thực thi lệnh";
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: createMessageId(),
+            role: "model",
+            text: errorText,
+            error: true,
+            createdAtMs: Date.now(),
+          },
+        ]);
+      } finally {
+        setStreamingText("");
+        setStreamStatus(null);
+        setSending(false);
+      }
+    },
+    [appendReplyMessage, sending, tauri]
   );
 
   const clearMessages = useCallback(() => {
     setMessages([]);
+    setStreamingText("");
+    setStreamStatus(null);
   }, []);
 
   const openSourceUrl = useCallback(
@@ -300,15 +458,20 @@ export function useAiAssistant(): UseAiAssistantResult {
     configLoaded,
     messages,
     sending,
+    streamingText,
+    streamStatus,
     savingKey,
+    refreshingModels,
     setInputFocused,
     focusWindow,
     openAiSettings,
     dismissAskNusa,
     saveApiKey,
     clearApiKey,
+    refreshModels,
     updateSettings,
     sendMessage,
+    resolvePendingCommand,
     clearMessages,
     openSourceUrl,
   };

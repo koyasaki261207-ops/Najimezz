@@ -9,6 +9,7 @@ import {
   ChevronDown,
   ChevronUp,
   Contrast,
+  Cpu,
   Droplet,
   Inbox,
   Info,
@@ -18,6 +19,7 @@ import {
   Music,
   Plus,
   Power,
+  RefreshCw,
   RotateCcw,
   Settings,
   Sparkles,
@@ -109,13 +111,14 @@ const SIDEBAR_ITEMS: SidebarNavItem[] = [
   { id: "shelf", label: "Shelf", bg: "#F59E0B", icon: Inbox },
 ];
 
-const PAGE_META: Record<NotchPageId, { label: string; accent: string }> = {
+const PAGE_META: Record<NotchPageId, { label: string; accent: string; description?: string }> = {
   music: { label: "Music", accent: "#FF3B5C" },
   pomodoro: { label: "Pomodoro", accent: "#8B5CF6" },
   water: { label: "Water", accent: "#38BDF8" },
   weather: { label: "Weather", accent: "#FBBF24" },
   shelf: { label: "Shelf", accent: "#F59E0B" },
   calendar: { label: "Calendar", accent: "#22C55E" },
+  system: { label: "System", accent: "#38BDF8", description: "CPU, RAM, Disk, Network & Uptime" },
   ai: { label: "Ask Nusa", accent: "#7C3AED" },
 };
 
@@ -229,6 +232,11 @@ function PageMiniPreview({ pageId }: { pageId: NotchPageId }) {
               <span />
               <span />
             </div>
+          </div>
+        )}
+        {pageId === "system" && (
+          <div className="mini-ai">
+            <Cpu size={11} style={{ color: accent }} />
           </div>
         )}
         {pageId === "ai" && (
@@ -1076,31 +1084,68 @@ export function SettingsWindow() {
 
                   <div className="settings-row">
                     <div className="settings-row-text">
-                      <div className="settings-row-title">Model</div>
+                      <div className="settings-row-title">Model (Max 8,192 tokens)</div>
                       <div className="settings-row-sub">
-                        Free key: aistudio.google.com &rsaquo; Get API key
+                        {aiCtrl.config.hasApiKey
+                          ? aiCtrl.config.resolvedModel
+                            ? `Active: ${aiCtrl.config.resolvedModel}${
+                                aiCtrl.config.availableModels.length > 0
+                                  ? ` · ${aiCtrl.config.availableModels.length} models ready`
+                                  : ""
+                              }`
+                            : "Free key: aistudio.google.com › Get API key"
+                          : "Free key: aistudio.google.com › Get API key"}
                       </div>
                     </div>
-                    <select
-                      className="settings-select"
-                      value={aiCtrl.config.model}
-                      aria-label="Gemini model"
-                      onChange={(e) => {
-                        aiCtrl
-                          .updateSettings(
-                            e.target.value as AiModelId,
-                            aiCtrl.config.thinkingLevel,
-                            aiCtrl.config.webSearch
-                          )
-                          .catch(() => {});
-                      }}
-                    >
-                      {AI_MODEL_OPTIONS.map((opt) => (
-                        <option key={opt.id} value={opt.id}>
-                          {opt.label} ({opt.tierNote})
-                        </option>
-                      ))}
-                    </select>
+                    <div className="settings-inline-actions">
+                      {aiCtrl.config.hasApiKey && (
+                        <button
+                          type="button"
+                          className="settings-action-btn"
+                          title="Dò lại danh sách model khả dụng cho API key"
+                          disabled={aiCtrl.refreshingModels}
+                          onClick={() => {
+                            aiCtrl
+                              .refreshModels()
+                              .then(() =>
+                                flashNotice("Đã cập nhật danh sách model khả dụng")
+                              )
+                              .catch((err) =>
+                                flashNotice(
+                                  typeof err === "string"
+                                    ? err
+                                    : "Không dò được danh sách model"
+                                )
+                              );
+                          }}
+                        >
+                          <RefreshCw size={12} strokeWidth={2.2} />
+                          <span>{aiCtrl.refreshingModels ? "..." : "Scan"}</span>
+                        </button>
+                      )}
+                      <select
+                        className="settings-select"
+                        value={aiCtrl.config.model}
+                        aria-label="Gemini model"
+                        onChange={(e) => {
+                          aiCtrl
+                            .updateSettings(
+                              e.target.value as AiModelId,
+                              aiCtrl.config.thinkingLevel,
+                              aiCtrl.config.webSearch,
+                              aiCtrl.config.allowScreenCapture,
+                              aiCtrl.config.allowPcControl
+                            )
+                            .catch(() => {});
+                        }}
+                      >
+                        {AI_MODEL_OPTIONS.map((opt) => (
+                          <option key={opt.id} value={opt.id}>
+                            {opt.label} ({opt.tierNote})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                   </div>
 
                   <div className="settings-row">
@@ -1146,6 +1191,54 @@ export function SettingsWindow() {
                           .updateSettings(
                             aiCtrl.config.model,
                             aiCtrl.config.thinkingLevel,
+                            checked
+                          )
+                          .catch(() => {});
+                      }}
+                    />
+                  </div>
+
+                  <div className="settings-row">
+                    <div className="settings-row-text">
+                      <div className="settings-row-title">Auto screenshot (Screen vision)</div>
+                      <div className="settings-row-sub">
+                        Allow Ask Nusa to capture your screen automatically when you ask about what is open
+                      </div>
+                    </div>
+                    <ToggleSwitch
+                      ariaLabel="Auto screenshot"
+                      checked={aiCtrl.config.allowScreenCapture}
+                      onChange={(checked) => {
+                        aiCtrl
+                          .updateSettings(
+                            aiCtrl.config.model,
+                            aiCtrl.config.thinkingLevel,
+                            aiCtrl.config.webSearch,
+                            checked,
+                            aiCtrl.config.allowPcControl
+                          )
+                          .catch(() => {});
+                      }}
+                    />
+                  </div>
+
+                  <div className="settings-row">
+                    <div className="settings-row-text">
+                      <div className="settings-row-title">PC &amp; Nusa control</div>
+                      <div className="settings-row-sub">
+                        Open apps, adjust volume/media, manage Nusa modules and propose PowerShell commands (always asks before running)
+                      </div>
+                    </div>
+                    <ToggleSwitch
+                      ariaLabel="PC and Nusa control"
+                      checked={aiCtrl.config.allowPcControl}
+                      onChange={(checked) => {
+                        aiCtrl
+                          .updateSettings(
+                            aiCtrl.config.model,
+                            aiCtrl.config.thinkingLevel,
+                            aiCtrl.config.webSearch,
+                            aiCtrl.config.allowScreenCapture,
                             checked
                           )
                           .catch(() => {});

@@ -3,7 +3,7 @@ use crate::settings::{sync_hide_fullscreen_into_settings, SettingsState};
 use crate::tray::TrayHandles;
 use serde::{Deserialize, Serialize};
 use std::sync::{
-    atomic::{AtomicBool, Ordering},
+    atomic::{AtomicBool, AtomicU32, Ordering},
     Arc,
 };
 use std::thread;
@@ -22,10 +22,16 @@ const EXPANDED_HEIGHT: f64 = 196.0;
 const EXPANDED_TALL_HEIGHT: f64 = 286.0;
 const MEGA_HALF_WIDTH: f64 = 374.0;
 const MEGA_HEIGHT: f64 = 478.0;
+const ASK_PILL_HALF_WIDTH: f64 = 248.0;
+const ASK_PILL_HEIGHT: f64 = 72.0;
+const ASK_THINKING_HALF_WIDTH: f64 = 262.0;
+const ASK_THINKING_HEIGHT: f64 = 128.0;
+const ASK_PANEL_HALF_WIDTH: f64 = 274.0;
+const ASK_PANEL_HEIGHT: f64 = 268.0;
 const COLLAPSE_DELAY_MS: u64 = 240;
 const DRAG_OUTSIDE_RESET_MS: u64 = 700;
 const POLL_INTERVAL_MS: u64 = 32;
-const FULLSCREEN_POLL_EVERY_TICKS: u8 = 8;
+const FULLSCREEN_POLL_EVERY_TICKS: u8 = 6;
 
 #[derive(Clone)]
 pub struct NotchState {
@@ -40,7 +46,9 @@ pub struct NotchState {
     pub mascot_peek: Arc<AtomicBool>,
     pub dragging: Arc<AtomicBool>,
     pub input_lock: Arc<AtomicBool>,
+    pub ai_busy: Arc<AtomicBool>,
     pub ask_open: Arc<AtomicBool>,
+    pub ask_panel_height: Arc<AtomicU32>,
     pub hide_in_fullscreen: Arc<AtomicBool>,
     pub fullscreen_hidden: Arc<AtomicBool>,
 }
@@ -59,7 +67,9 @@ impl Default for NotchState {
             mascot_peek: Arc::new(AtomicBool::new(false)),
             dragging: Arc::new(AtomicBool::new(false)),
             input_lock: Arc::new(AtomicBool::new(false)),
+            ai_busy: Arc::new(AtomicBool::new(false)),
             ask_open: Arc::new(AtomicBool::new(false)),
+            ask_panel_height: Arc::new(AtomicU32::new(0)),
             hide_in_fullscreen: Arc::new(AtomicBool::new(true)),
             fullscreen_hidden: Arc::new(AtomicBool::new(false)),
         }
@@ -117,7 +127,9 @@ pub fn set_dragging_active(app: &AppHandle, state: &NotchState, active: bool) {
 pub fn dismiss_ask_nusa_internal(app: &AppHandle, state: &NotchState) {
     state.ask_open.store(false, Ordering::Relaxed);
     state.input_lock.store(false, Ordering::Relaxed);
+    state.tall.store(false, Ordering::Relaxed);
     state.mega.store(false, Ordering::Relaxed);
+    state.ask_panel_height.store(0, Ordering::Relaxed);
 
     let pinned = state.pinned.load(Ordering::Relaxed);
     let next_expanded = pinned;
@@ -144,6 +156,9 @@ pub fn toggle_ask_nusa(app: &AppHandle, state: &NotchState) {
 
     state.ask_open.store(true, Ordering::Relaxed);
     state.input_lock.store(true, Ordering::Relaxed);
+    state.tall.store(false, Ordering::Relaxed);
+    state.mega.store(false, Ordering::Relaxed);
+    state.ask_panel_height.store(0, Ordering::Relaxed);
     state.expanded.store(true, Ordering::Relaxed);
     state.fullscreen_hidden.store(false, Ordering::Relaxed);
 
@@ -165,8 +180,29 @@ pub fn toggle_ask_nusa(app: &AppHandle, state: &NotchState) {
     let _ = app.emit("notch:ask-nusa", AskNusaEventPayload { open: true });
 }
 
-pub fn clear_ask_open_on_blur(state: &NotchState) {
-    state.ask_open.store(false, Ordering::Relaxed);
+pub fn clear_ask_open_on_blur(app: &AppHandle, state: &NotchState) {
+    if state.ai_busy.load(Ordering::Relaxed) {
+        return;
+    }
+    let was_ask_open = state.ask_open.swap(false, Ordering::Relaxed);
+    state.input_lock.store(false, Ordering::Relaxed);
+
+    if was_ask_open {
+        state.tall.store(false, Ordering::Relaxed);
+        state.mega.store(false, Ordering::Relaxed);
+        state.ask_panel_height.store(0, Ordering::Relaxed);
+        let pinned = state.pinned.load(Ordering::Relaxed);
+        let next_expanded = pinned;
+        state.expanded.store(next_expanded, Ordering::Relaxed);
+        let _ = app.emit("notch:ask-nusa", AskNusaEventPayload { open: false });
+        let _ = app.emit(
+            "notch:state",
+            NotchStatePayload {
+                expanded: next_expanded,
+                pinned,
+            },
+        );
+    }
 }
 
 pub fn apply_pinned_state(
@@ -236,8 +272,10 @@ pub fn start_hover_tracker(app: AppHandle, state: NotchState) {
                 continue;
             };
 
+            let ai_busy = state.ai_busy.load(Ordering::Relaxed);
             let ask_bypass = state.ask_open.load(Ordering::Relaxed)
-                || state.input_lock.load(Ordering::Relaxed);
+                || state.input_lock.load(Ordering::Relaxed)
+                || ai_busy;
 
             let hide_fs_enabled = state.hide_in_fullscreen.load(Ordering::Relaxed);
             if hide_fs_enabled && !ask_bypass {
@@ -251,16 +289,22 @@ pub fn start_hover_tracker(app: AppHandle, state: NotchState) {
             }
 
             if hide_fs_enabled && cached_fullscreen && !ask_bypass {
-                if !state.fullscreen_hidden.swap(true, Ordering::Relaxed) {
+                let first_hide = !state.fullscreen_hidden.swap(true, Ordering::Relaxed);
+                let still_visible = window.is_visible().unwrap_or(false);
+
+                if first_hide || still_visible {
                     let _ = window.set_ignore_cursor_events(true);
                     last_ignore = Some(true);
                     let _ = window.hide();
+                }
 
+                if first_hide {
                     let pinned = state.pinned.load(Ordering::Relaxed);
                     let was_expanded = state.expanded.swap(false, Ordering::Relaxed);
                     state.mega.store(false, Ordering::Relaxed);
                     state.dragging.store(false, Ordering::Relaxed);
                     state.ask_open.store(false, Ordering::Relaxed);
+                    state.mascot_peek.store(false, Ordering::Relaxed);
                     leave_started_at = None;
                     drag_outside_at = None;
 
@@ -305,17 +349,28 @@ pub fn start_hover_tracker(app: AppHandle, state: NotchState) {
             };
 
             let is_mega = state.mega.load(Ordering::Relaxed);
-            let expanded_half_width = if is_mega {
-                MEGA_HALF_WIDTH
+            let is_tall = state.tall.load(Ordering::Relaxed);
+            let is_ask_open = state.ask_open.load(Ordering::Relaxed);
+            let (expanded_half_width, expanded_height) = if is_ask_open {
+                if is_mega {
+                    let measured = state.ask_panel_height.load(Ordering::Relaxed);
+                    let h = if measured > 0 {
+                        measured as f64
+                    } else {
+                        ASK_PANEL_HEIGHT
+                    };
+                    (ASK_PANEL_HALF_WIDTH, h)
+                } else if is_tall {
+                    (ASK_THINKING_HALF_WIDTH, ASK_THINKING_HEIGHT)
+                } else {
+                    (ASK_PILL_HALF_WIDTH, ASK_PILL_HEIGHT)
+                }
+            } else if is_mega {
+                (MEGA_HALF_WIDTH, MEGA_HEIGHT)
+            } else if is_tall {
+                (EXPANDED_HALF_WIDTH, EXPANDED_TALL_HEIGHT)
             } else {
-                EXPANDED_HALF_WIDTH
-            };
-            let expanded_height = if is_mega {
-                MEGA_HEIGHT
-            } else if state.tall.load(Ordering::Relaxed) {
-                EXPANDED_TALL_HEIGHT
-            } else {
-                EXPANDED_HEIGHT
+                (EXPANDED_HALF_WIDTH, EXPANDED_HEIGHT)
             };
 
             let in_collapsed = rel_x >= center_x - collapsed_half_width
@@ -355,7 +410,7 @@ pub fn start_hover_tracker(app: AppHandle, state: NotchState) {
             let ask_open = state.ask_open.load(Ordering::Relaxed);
             let open_on_click = state.open_on_click.load(Ordering::Relaxed);
 
-            let next_expanded = if pinned || dragging || input_locked || ask_open {
+            let next_expanded = if pinned || dragging || input_locked || ask_open || ai_busy {
                 leave_started_at = None;
                 true
             } else if !currently_expanded {
@@ -479,6 +534,12 @@ pub fn set_notch_tall(state: State<'_, NotchState>, tall: bool) {
 #[tauri::command]
 pub fn set_notch_mega(state: State<'_, NotchState>, mega: bool) {
     state.mega.store(mega, Ordering::Relaxed);
+}
+
+#[tauri::command]
+pub fn set_ask_panel_height(state: tauri::State<'_, NotchState>, height: f64) {
+    let clamped = height.round().clamp(0.0, 360.0) as u32;
+    state.ask_panel_height.store(clamped, Ordering::Relaxed);
 }
 
 #[tauri::command]

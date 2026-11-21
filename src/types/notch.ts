@@ -7,6 +7,7 @@ export type NotchPageId =
   | "weather"
   | "shelf"
   | "calendar"
+  | "system"
   | "ai";
 
 export interface NotchPageDefinition {

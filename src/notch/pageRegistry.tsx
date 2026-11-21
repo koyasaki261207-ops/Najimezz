@@ -8,6 +8,7 @@ import {
   Timer,
 } from "lucide-react";
 import type { NotchPageDefinition } from "../types/notch";
+import { SystemPage } from "../components/SystemPage";
 
 function MusicFallbackSlot() {
   return (
@@ -155,6 +156,13 @@ export const NOTCH_PAGES: NotchPageDefinition[] = [
     showHeaderTitle: true,
     accentColor: "#22C55E",
     component: CalendarFallbackSlot,
+  },
+  {
+    id: "system",
+    label: "System",
+    showHeaderTitle: true,
+    accentColor: "#38BDF8",
+    component: SystemPage,
   },
   {
     id: "ai",

@@ -9,7 +9,7 @@ use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder
 
 const SETTINGS_FILENAME: &str = "settings.json";
 const ALL_PAGE_IDS: &[&str] = &[
-    "music", "pomodoro", "water", "weather", "shelf", "calendar", "ai",
+    "music", "pomodoro", "water", "weather", "shelf", "calendar", "system", "ai",
 ];
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -134,7 +134,7 @@ fn sanitize_settings(mut cfg: AppSettings) -> AppSettings {
     let mut clean_enabled: Vec<String> = Vec::new();
     for id in cfg.enabled_pages {
         if id == "apps" {
-            for replacement in ["calendar", "ai"] {
+            for replacement in ["calendar", "system", "ai"] {
                 if !clean_enabled.iter().any(|existing| existing == replacement) {
                     clean_enabled.push(replacement.to_string());
                 }
@@ -143,6 +143,11 @@ fn sanitize_settings(mut cfg: AppSettings) -> AppSettings {
         }
         if ALL_PAGE_IDS.contains(&id.as_str()) && !clean_enabled.contains(&id) {
             clean_enabled.push(id);
+        }
+    }
+    for &id in ALL_PAGE_IDS {
+        if !clean_enabled.iter().any(|existing| existing == id) {
+            clean_enabled.push(id.to_string());
         }
     }
     if clean_enabled.is_empty() {

@@ -18,15 +18,17 @@ mod win_impl {
     };
     use windows::Win32::System::Threading::GetCurrentProcessId;
     use windows::Win32::UI::Shell::{
-        SHQueryUserNotificationState, QUNS_PRESENTATION_MODE, QUNS_RUNNING_D3D_FULL_SCREEN,
+        SHQueryUserNotificationState, QUNS_BUSY, QUNS_PRESENTATION_MODE,
+        QUNS_RUNNING_D3D_FULL_SCREEN,
     };
     use windows::Win32::UI::WindowsAndMessaging::{
-        GetClassNameW, GetForegroundWindow, GetWindowLongW, GetWindowRect,
-        GetWindowThreadProcessId, IsIconic, IsWindowVisible, GWL_STYLE, WS_CAPTION, WS_THICKFRAME,
+        GetAncestor, GetClassNameW, GetForegroundWindow, GetWindowLongW, GetWindowRect,
+        GetWindowThreadProcessId, IsIconic, IsWindowVisible, IsZoomed, GA_ROOT, GWL_STYLE,
+        WS_CAPTION, WS_THICKFRAME,
     };
 
     const MONITORINFOF_PRIMARY_FLAG: u32 = 1;
-    const EDGE_TOLERANCE_PX: i32 = 2;
+    const EDGE_TOLERANCE_PX: i32 = 4;
 
     const IGNORED_SHELL_CLASSES: &[&str] = &[
         "Progman",
@@ -42,16 +44,25 @@ mod win_impl {
 
     pub fn detect_primary_monitor_fullscreen() -> bool {
         unsafe {
-            if let Ok(state) = SHQueryUserNotificationState() {
-                if state == QUNS_RUNNING_D3D_FULL_SCREEN || state == QUNS_PRESENTATION_MODE {
-                    return true;
-                }
+            let quns = SHQueryUserNotificationState().ok();
+            let is_d3d_or_presentation = matches!(
+                quns,
+                Some(s) if s == QUNS_RUNNING_D3D_FULL_SCREEN || s == QUNS_PRESENTATION_MODE
+            );
+            let is_quns_busy = matches!(quns, Some(s) if s == QUNS_BUSY);
+
+            if is_d3d_or_presentation {
+                return true;
             }
 
-            let hwnd = GetForegroundWindow();
-            if hwnd.0.is_null() {
+            let raw_fg = GetForegroundWindow();
+            if raw_fg.0.is_null() {
                 return false;
             }
+
+            let root = GetAncestor(raw_fg, GA_ROOT);
+            let hwnd = if !root.0.is_null() { root } else { raw_fg };
+
             if !IsWindowVisible(hwnd).as_bool() || IsIconic(hwnd).as_bool() {
                 return false;
             }
@@ -106,6 +117,10 @@ mod win_impl {
                 return false;
             }
 
+            if is_quns_busy {
+                return true;
+            }
+
             let work = mon_info.rcWork;
             let taskbar_auto_hidden = (work.left - mon.left).abs() <= EDGE_TOLERANCE_PX
                 && (work.top - mon.top).abs() <= EDGE_TOLERANCE_PX
@@ -113,10 +128,12 @@ mod win_impl {
                 && (work.bottom - mon.bottom).abs() <= EDGE_TOLERANCE_PX;
 
             if taskbar_auto_hidden {
+                let is_maximized = IsZoomed(hwnd).as_bool();
                 let style = GetWindowLongW(hwnd, GWL_STYLE) as u32;
                 let has_standard_frame =
                     (style & WS_CAPTION.0) == WS_CAPTION.0 && (style & WS_THICKFRAME.0) != 0;
-                if has_standard_frame {
+
+                if is_maximized && has_standard_frame {
                     return false;
                 }
             }

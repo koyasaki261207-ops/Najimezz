@@ -2,6 +2,7 @@ import { useState } from "react";
 import {
   Calendar,
   CloudSun,
+  Cpu,
   Droplet,
   Inbox,
   Music,
@@ -33,6 +34,8 @@ function renderPageIcon(pageId: NotchPageId) {
       return <Inbox size={14} strokeWidth={2.1} />;
     case "calendar":
       return <Calendar size={14} strokeWidth={2.1} />;
+    case "system":
+      return <Cpu size={14} strokeWidth={2.1} />;
     case "ai":
       return <Sparkles size={14} strokeWidth={2.1} />;
   }

@@ -1,4 +1,5 @@
 mod ai;
+mod ai_tools;
 mod fullscreen;
 mod lyrics;
 mod mascot;
@@ -9,10 +10,12 @@ mod shelf;
 mod shortcut;
 mod tray;
 mod weather;
+mod system_monitor;
 
 use ai::{
-    ai_send_message, clear_ai_api_key, get_ai_config, load_initial_ai_config, open_external_url,
-    save_ai_api_key, update_ai_settings, AiState,
+    ai_resolve_pending_command, ai_send_message, clear_ai_api_key, get_ai_config,
+    load_initial_ai_config, open_external_url, refresh_ai_models, save_ai_api_key,
+    update_ai_settings, AiState,
 };
 use lyrics::{fetch_lyrics, LyricsCache};
 use mascot::{get_mascot_state, start_mascot_watcher, trigger_mascot_reaction, MascotState};
@@ -23,9 +26,9 @@ use media::{
 use notch_window::{
     clear_ask_open_on_blur, dismiss_ask_nusa, focus_notch_window, get_notch_preferences,
     get_notch_state, position_notch_top_center, quit_app, recenter_notch, set_ask_open,
-    set_dragging_active, set_hide_in_fullscreen, set_notch_collapsed_wide, set_notch_expanded,
-    set_notch_input_lock, set_notch_mega, set_notch_pinned, set_notch_tall, start_hover_tracker,
-    NotchState,
+    set_ask_panel_height, set_dragging_active, set_hide_in_fullscreen, set_notch_collapsed_wide,
+    set_notch_expanded, set_notch_input_lock, set_notch_mega, set_notch_pinned, set_notch_tall,
+    start_hover_tracker, NotchState,
 };
 use settings::{
     get_app_settings, load_app_settings, open_settings_window, take_pending_settings_tab,
@@ -43,6 +46,7 @@ use shortcut::{
 use tauri::{DragDropEvent, Emitter, Manager, WindowEvent};
 use tray::{setup_tray, TrayHandles};
 use weather::{fetch_weather, WeatherCache};
+use system_monitor::{get_system_stats, open_task_manager, SystemMonitorState};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -69,6 +73,7 @@ pub fn run() {
         .manage(weather_cache)
         .manage(shelf_state.clone())
         .manage(ai_state.clone())
+        .manage(SystemMonitorState::default())
         .setup(move |app| {
             let loaded_settings = load_app_settings(app.handle(), &settings_state, &notch_state);
             load_initial_items(app.handle(), &shelf_state, loaded_settings.shelf_start_empty);
@@ -100,7 +105,7 @@ pub fn run() {
                 WindowEvent::Focused(false) => {
                     let app = window.app_handle();
                     let notch_state = app.state::<NotchState>();
-                    clear_ask_open_on_blur(&notch_state);
+                    clear_ask_open_on_blur(app, &notch_state);
                 }
                 WindowEvent::DragDrop(drag_event) => {
                     let app = window.app_handle();
@@ -158,6 +163,7 @@ pub fn run() {
             set_hide_in_fullscreen,
             set_notch_tall,
             set_notch_mega,
+            set_ask_panel_height,
             set_notch_collapsed_wide,
             set_notch_input_lock,
             focus_notch_window,
@@ -189,11 +195,15 @@ pub fn run() {
             reveal_shelf_item,
             copy_shelf_files,
             get_ai_config,
+            refresh_ai_models,
             save_ai_api_key,
             clear_ai_api_key,
             update_ai_settings,
             ai_send_message,
-            open_external_url
+            ai_resolve_pending_command,
+            open_external_url,
+            get_system_stats,
+            open_task_manager
         ])
         .run(tauri::generate_context!())
         .expect("error while running Nusa application");

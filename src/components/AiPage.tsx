@@ -1,68 +1,230 @@
 import {
   useEffect,
+  useMemo,
   useRef,
   useState,
   type FormEvent,
   type KeyboardEvent,
 } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import {
   Check,
-  Copy,
   ExternalLink,
   KeyRound,
-  Loader2,
-  Maximize2,
-  Minimize2,
+  Play,
   Search,
-  SlidersHorizontal,
-  Trash2,
+  Terminal,
+  X,
+  Zap,
 } from "lucide-react";
 import { useAiAssistant } from "../hooks/useAiAssistant";
-import { AI_MODEL_OPTIONS } from "../types/ai";
+
+export type AskStage = "pill" | "thinking" | "answered";
 
 export interface AiPageProps {
   isMega: boolean;
+  focusNonce: number;
+  standalonePill?: boolean;
   onSetMega: (mega: boolean) => void;
+  onStageChange?: (stage: AskStage) => void;
+  onDismissPill?: () => void;
   onNotify: (message: string) => void;
-  focusNonce?: number;
+}
+
+function AskSpinnerIcon() {
+  return (
+    <svg
+      className="ask-spinner-svg"
+      width="16"
+      height="16"
+      viewBox="0 0 16 16"
+      fill="none"
+      aria-hidden="true"
+    >
+      <g stroke="#FFFFFF" strokeWidth="1.9" strokeLinecap="round">
+        <line x1="8" y1="2.2" x2="8" y2="5.1" opacity="1" />
+        <line x1="12.9" y1="5.1" x2="10.4" y2="6.6" opacity="0.82" />
+        <line x1="12.9" y1="10.9" x2="10.4" y2="9.4" opacity="0.62" />
+        <line x1="8" y1="13.8" x2="8" y2="10.9" opacity="0.44" />
+        <line x1="3.1" y1="10.9" x2="5.6" y2="9.4" opacity="0.28" />
+        <line x1="3.1" y1="5.1" x2="5.6" y2="6.6" opacity="0.18" />
+      </g>
+    </svg>
+  );
+}
+
+function AskHappyEyes() {
+  return (
+    <svg
+      className="ask-happy-eyes-svg"
+      width="20"
+      height="12"
+      viewBox="0 0 20 12"
+      fill="none"
+      aria-hidden="true"
+    >
+      <path
+        d="M2.2 8.8C3.3 5.2 6.7 5.2 7.8 8.8"
+        stroke="#FFFFFF"
+        strokeWidth="2.1"
+        strokeLinecap="round"
+      />
+      <path
+        d="M12.2 8.8C13.3 5.2 16.7 5.2 17.8 8.8"
+        stroke="#FFFFFF"
+        strokeWidth="2.1"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
 }
 
 export function AiPage({
-  onNotify,
   isMega,
+  focusNonce,
+  standalonePill = false,
   onSetMega,
-  focusNonce = 0,
+  onStageChange,
+  onDismissPill,
+  onNotify,
 }: AiPageProps) {
   const {
     config,
     configLoaded,
     messages,
     sending,
+    streamingText,
+    streamStatus,
     setInputFocused,
     focusWindow,
     openAiSettings,
     dismissAskNusa,
     sendMessage,
+    resolvePendingCommand,
     clearMessages,
     openSourceUrl,
   } = useAiAssistant();
 
   const [promptInput, setPromptInput] = useState("");
-  const [copiedMsgId, setCopiedMsgId] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [happyEyes, setHappyEyes] = useState(false);
 
   const inputRef = useRef<HTMLInputElement | null>(null);
-  const chatEndRef = useRef<HTMLDivElement | null>(null);
+  const bodyRef = useRef<HTMLDivElement | null>(null);
+  const cardRef = useRef<HTMLDivElement | null>(null);
+  const lastReplyIdRef = useRef<string | null>(null);
+  const happyTimerRef = useRef<number | null>(null);
+  const copyTimerRef = useRef<number | null>(null);
 
-  const selectedModelMeta =
-    AI_MODEL_OPTIONS.find((item) => item.id === config.model) ??
-    AI_MODEL_OPTIONS[0];
-
-  const hasConversation = messages.length > 0 || sending;
   const needsApiKey = configLoaded && !config.hasApiKey;
 
+  const latestUserMsg = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role === "user") return messages[i];
+    }
+    return null;
+  }, [messages]);
+
+  const latestModelMsg = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role === "model") return messages[i];
+    }
+    return null;
+  }, [messages]);
+
+  const isStreamingReply = sending && streamingText.length > 0;
+
+  const stage: AskStage = isStreamingReply
+    ? "answered"
+    : sending
+      ? "thinking"
+      : latestModelMsg
+        ? "answered"
+        : "pill";
+
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [messages, sending, isMega]);
+    onStageChange?.(stage);
+  }, [stage, onStageChange]);
+
+  useEffect(() => {
+    if (!standalonePill) return;
+    const isTauri =
+      typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+    if (!isTauri) return;
+
+    const el = cardRef.current;
+    if (!el || stage !== "answered") {
+      invoke("set_ask_panel_height", { height: 0 }).catch(() => {});
+      return;
+    }
+
+    const syncHeight = () => {
+      const rectHeight = Math.ceil(el.getBoundingClientRect().height);
+      if (rectHeight > 0) {
+        invoke("set_ask_panel_height", { height: rectHeight + 24 }).catch(
+          () => {}
+        );
+      }
+    };
+
+    syncHeight();
+    const observer = new ResizeObserver(() => {
+      syncHeight();
+    });
+    observer.observe(el);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [standalonePill, stage]);
+
+  useEffect(() => {
+    if (!standalonePill) {
+      if (stage === "answered" && !isMega) {
+        onSetMega(true);
+      } else if (stage === "pill" && isMega) {
+        onSetMega(false);
+      }
+    }
+  }, [stage, standalonePill, isMega, onSetMega]);
+
+  useEffect(() => {
+    if (!isStreamingReply || !bodyRef.current) return;
+    bodyRef.current.scrollTop = bodyRef.current.scrollHeight;
+  }, [isStreamingReply, streamingText]);
+
+  useEffect(() => {
+    if (!latestModelMsg || latestModelMsg.error || sending) return;
+    if (lastReplyIdRef.current === latestModelMsg.id) return;
+
+    lastReplyIdRef.current = latestModelMsg.id;
+    setHappyEyes(true);
+
+    if (happyTimerRef.current !== null) {
+      window.clearTimeout(happyTimerRef.current);
+    }
+    happyTimerRef.current = window.setTimeout(() => {
+      setHappyEyes(false);
+      happyTimerRef.current = null;
+    }, 2800);
+
+    const focusTimer = window.setTimeout(() => {
+      inputRef.current?.focus();
+    }, 60);
+
+    return () => window.clearTimeout(focusTimer);
+  }, [latestModelMsg, sending]);
+
+  useEffect(() => {
+    return () => {
+      if (happyTimerRef.current !== null) {
+        window.clearTimeout(happyTimerRef.current);
+      }
+      if (copyTimerRef.current !== null) {
+        window.clearTimeout(copyTimerRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (focusNonce <= 0 || needsApiKey) return;
@@ -73,6 +235,11 @@ export function AiPage({
     }, 40);
     return () => window.clearTimeout(timer);
   }, [focusNonce, needsApiKey, focusWindow]);
+
+  const handleDismiss = () => {
+    onDismissPill?.();
+    dismissAskNusa();
+  };
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -87,10 +254,8 @@ export function AiPage({
     const content = promptInput.trim();
     if (!content) return;
 
+    setHappyEyes(false);
     setPromptInput("");
-    if (!isMega) {
-      onSetMega(true);
-    }
     await sendMessage(content);
   };
 
@@ -98,192 +263,251 @@ export function AiPage({
     if (event.key === "Escape") {
       event.preventDefault();
       event.currentTarget.blur();
-      dismissAskNusa();
+      handleDismiss();
     }
   };
 
-  const handleClearChat = () => {
+  const handleNewChat = () => {
+    setHappyEyes(false);
+    setPromptInput("");
+    lastReplyIdRef.current = null;
     clearMessages();
     if (isMega) {
       onSetMega(false);
     }
+    window.setTimeout(() => {
+      inputRef.current?.focus();
+    }, 40);
   };
 
-  const handleCopyReply = (id: string, text: string) => {
+  const handleCopyLatest = () => {
+    if (!latestModelMsg?.text) return;
     navigator.clipboard
-      ?.writeText(text)
+      ?.writeText(latestModelMsg.text)
       .then(() => {
-        setCopiedMsgId(id);
-        onNotify("Đã sao chép câu trả lời");
-        window.setTimeout(() => {
-          setCopiedMsgId((curr) => (curr === id ? null : curr));
-        }, 1400);
+        setCopied(true);
+        if (copyTimerRef.current !== null) {
+          window.clearTimeout(copyTimerRef.current);
+        }
+        copyTimerRef.current = window.setTimeout(() => {
+          setCopied(false);
+          copyTimerRef.current = null;
+        }, 1600);
       })
       .catch(() => {
         onNotify("Không sao chép được nội dung");
       });
   };
 
-  const renderPillBar = () => (
-    <form
-      className={`ai-pill-bar ${sending ? "is-sending" : ""} ${
-        needsApiKey ? "is-needs-key" : ""
-      }`}
-      onSubmit={handleSubmit}
-      onClick={() => {
-        focusWindow();
-        if (needsApiKey) {
-          openAiSettings();
-        } else {
-          inputRef.current?.focus();
-        }
-      }}
-    >
-      <span
-        className={`ai-nusa-eyes ${sending ? "is-thinking" : ""}`}
-        aria-hidden="true"
-      >
-        <span />
-        <span />
-      </span>
+  const showSmilingEyes =
+    !sending && happyEyes && promptInput.trim().length === 0;
 
-      <input
-        ref={inputRef}
-        type="text"
-        className="ai-pill-input"
-        placeholder={
-          needsApiKey ? "Nhập API key trong Cài đặt..." : "Ask Nusa..."
-        }
-        value={promptInput}
-        disabled={sending}
-        readOnly={needsApiKey}
-        onFocus={() => {
-          focusWindow();
-          if (!needsApiKey) {
-            setInputFocused(true);
-          }
-        }}
-        onBlur={() => setInputFocused(false)}
-        onKeyDown={handleInputKeyDown}
-        onChange={(e) => setPromptInput(e.target.value)}
-      />
-
-      {needsApiKey ? (
-        <button
-          type="button"
-          className="ai-pill-action-btn is-key-btn"
-          title="Mở cài đặt Ask Nusa để nhập Gemini API key"
-          aria-label="Mở cài đặt Ask Nusa"
-          onClick={(e) => {
-            e.stopPropagation();
-            openAiSettings();
-          }}
-        >
-          <KeyRound size={13} strokeWidth={2.2} />
-        </button>
-      ) : (
-        <button
-          type="submit"
-          className="ai-pill-action-btn"
-          disabled={sending || promptInput.trim().length === 0}
-          title="Hỏi Ask Nusa (Enter)"
-          aria-label="Gửi câu hỏi"
-          onClick={(e) => e.stopPropagation()}
-        >
-          {sending ? (
-            <Loader2 className="ai-spin" size={14} strokeWidth={2.2} />
-          ) : (
-            <Search size={14} strokeWidth={2.1} />
-          )}
-        </button>
-      )}
-    </form>
-  );
-
-  if (!hasConversation && !isMega) {
-    return (
-      <div
-        className="ai-app ai-app-compact"
-        onMouseDown={() => focusWindow()}
-      >
-        {renderPillBar()}
-      </div>
-    );
-  }
+  const placeholderText = sending
+    ? streamStatus ?? (isStreamingReply ? "Nusa is replying..." : "Nusa is thinking...")
+    : needsApiKey
+      ? "Nhập API key trong Cài đặt..."
+      : "Ask Nusa anything";
 
   return (
     <div
-      className={`ai-app ${isMega ? "is-mega" : "ai-app-compact"}`}
+      ref={cardRef}
+      className={`ask-card is-stage-${stage} ${
+        standalonePill ? "is-standalone" : "is-embedded"
+      }`}
       onMouseDown={() => focusWindow()}
+      onWheel={(e) => {
+        if (stage !== "pill") {
+          e.stopPropagation();
+        }
+      }}
     >
-      <div className="ai-mini-bar">
-        <span className="ai-mini-status">
-          {selectedModelMeta.shortLabel}
-          {config.webSearch ? " · Web" : ""}
+      <form
+        className="ask-top-bar"
+        onSubmit={handleSubmit}
+        onClick={() => {
+          focusWindow();
+          if (needsApiKey) {
+            openAiSettings();
+          } else if (!sending) {
+            inputRef.current?.focus();
+          }
+        }}
+      >
+        <span className="ask-left-indicator" aria-hidden="true">
+          {sending ? (
+            <AskSpinnerIcon />
+          ) : showSmilingEyes ? (
+            <AskHappyEyes />
+          ) : (
+            <span className="ask-nusa-eyes">
+              <span />
+              <span />
+            </span>
+          )}
         </span>
 
-        <div className="ai-mini-actions">
+        <input
+          ref={inputRef}
+          type="text"
+          className={`ask-top-input ${sending ? "is-thinking-text" : ""}`}
+          placeholder={placeholderText}
+          value={sending ? "" : promptInput}
+          disabled={sending}
+          readOnly={needsApiKey}
+          onFocus={() => {
+            focusWindow();
+            if (!needsApiKey) {
+              setInputFocused(true);
+            }
+          }}
+          onBlur={() => setInputFocused(false)}
+          onKeyDown={handleInputKeyDown}
+          onChange={(e) => {
+            if (happyEyes) {
+              setHappyEyes(false);
+            }
+            setPromptInput(e.target.value);
+          }}
+        />
+
+        {needsApiKey ? (
           <button
             type="button"
-            className="ai-ghost-btn"
-            title="Cài đặt Ask Nusa (Model, API Key, Web)"
-            aria-label="Cài đặt Ask Nusa"
-            onClick={openAiSettings}
+            className="ask-search-btn is-key-btn"
+            title="Mở cài đặt Ask Nusa để nhập Gemini API key"
+            aria-label="Mở cài đặt Ask Nusa"
+            onClick={(e) => {
+              e.stopPropagation();
+              openAiSettings();
+            }}
           >
-            <SlidersHorizontal size={11} strokeWidth={2.2} />
+            <KeyRound size={15} strokeWidth={2.2} />
           </button>
-
-          {messages.length > 0 && (
-            <button
-              type="button"
-              className="ai-ghost-btn"
-              title="Xóa hội thoại và thu gọn"
-              aria-label="Xóa hội thoại"
-              onClick={handleClearChat}
-            >
-              <Trash2 size={11} strokeWidth={2.2} />
-            </button>
-          )}
-
-          <button
-            type="button"
-            className="ai-ghost-btn"
-            title={isMega ? "Thu gọn" : "Mở rộng"}
-            aria-label={isMega ? "Thu gọn" : "Mở rộng"}
-            onClick={() => onSetMega(!isMega)}
-          >
-            {isMega ? (
-              <Minimize2 size={11} strokeWidth={2.2} />
-            ) : (
-              <Maximize2 size={11} strokeWidth={2.2} />
-            )}
-          </button>
-        </div>
-      </div>
-
-      <div
-        className="ai-chat-scroll"
-        onWheel={(e) => e.stopPropagation()}
-      >
-        {messages.length === 0 ? (
-          <div className="ai-blank-hint">
-            Nhập câu hỏi bên dưới · Tùy chỉnh model &amp; key trong Cài đặt
-          </div>
         ) : (
-          <div className="ai-messages-list">
-            {messages.map((msg) => (
-              <div
-                key={msg.id}
-                className={`ai-msg-row ${
-                  msg.role === "user" ? "is-user" : "is-model"
-                }`}
-              >
-                <div className={`ai-bubble ${msg.error ? "is-error" : ""}`}>
-                  <div className="ai-bubble-text">{msg.text}</div>
+          <button
+            type="submit"
+            className="ask-search-btn"
+            disabled={sending || promptInput.trim().length === 0}
+            title="Hỏi Ask Nusa (Enter)"
+            aria-label="Gửi câu hỏi"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <Search size={16} strokeWidth={2.1} />
+          </button>
+        )}
+      </form>
 
-                  {msg.sources && msg.sources.length > 0 && (
+      {stage === "thinking" && latestUserMsg && (
+        <div className="ask-thinking-stage">
+          <div className="ask-thinking-prompt-chip" title={latestUserMsg.text}>
+            {latestUserMsg.text}
+          </div>
+        </div>
+      )}
+
+      {stage === "answered" && (isStreamingReply || latestModelMsg) && (
+        <>
+          <div
+            ref={bodyRef}
+            className="ask-answer-scroll"
+            onWheel={(e) => e.stopPropagation()}
+          >
+            {isStreamingReply ? (
+              <div className="ask-answer-text">
+                {streamingText}
+                <span className="ask-stream-cursor" aria-hidden="true" />
+              </div>
+            ) : (
+              latestModelMsg && (
+                <>
+                  {latestModelMsg.actionsTaken &&
+                    latestModelMsg.actionsTaken.length > 0 && (
+                      <div className="ai-actions-list">
+                        {latestModelMsg.actionsTaken.map((act, idx) => (
+                          <span
+                            key={`${latestModelMsg.id}-act-${idx}`}
+                            className="ai-action-chip"
+                          >
+                            <Zap size={9} strokeWidth={2.3} />
+                            <span>{act}</span>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+
+                  {latestModelMsg.text && (
+                    <div
+                      className={`ask-answer-text ${
+                        latestModelMsg.error ? "is-error" : ""
+                      }`}
+                    >
+                      {latestModelMsg.text}
+                    </div>
+                  )}
+
+                  {latestModelMsg.pendingCommand && (
+                    <div className="ai-cmd-card">
+                      <div className="ai-cmd-head">
+                        <Terminal size={11} strokeWidth={2.2} />
+                        <span>{latestModelMsg.pendingCommand.explanation}</span>
+                      </div>
+
+                      <pre className="ai-cmd-code">
+                        <code>{latestModelMsg.pendingCommand.command}</code>
+                      </pre>
+
+                      {latestModelMsg.commandStatus === "pending" ? (
+                        <div className="ai-cmd-actions">
+                          <button
+                            type="button"
+                            className="ai-cmd-btn is-reject"
+                            disabled={sending}
+                            onClick={() => {
+                              void resolvePendingCommand(
+                                latestModelMsg.id,
+                                latestModelMsg.pendingCommand!.id,
+                                false
+                              );
+                            }}
+                          >
+                            <X size={11} strokeWidth={2.4} />
+                            <span>Từ chối</span>
+                          </button>
+                          <button
+                            type="button"
+                            className="ai-cmd-btn is-approve"
+                            disabled={sending}
+                            onClick={() => {
+                              void resolvePendingCommand(
+                                latestModelMsg.id,
+                                latestModelMsg.pendingCommand!.id,
+                                true
+                              );
+                            }}
+                          >
+                            <Play size={10} strokeWidth={2.4} />
+                            <span>Cho phép chạy</span>
+                          </button>
+                        </div>
+                      ) : (
+                        <div
+                          className={`ai-cmd-status ${
+                            latestModelMsg.commandStatus === "approved"
+                              ? "is-approved"
+                              : "is-rejected"
+                          }`}
+                        >
+                          {latestModelMsg.commandStatus === "approved"
+                            ? "✓ Đã cho phép thực thi"
+                            : "✕ Đã từ chối thực thi"}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {latestModelMsg.sources && latestModelMsg.sources.length > 0 && (
                     <div className="ai-sources-list">
-                      {msg.sources.slice(0, 5).map((src) => (
+                      {latestModelMsg.sources.slice(0, 5).map((src) => (
                         <button
                           key={src.uri}
                           type="button"
@@ -301,51 +525,61 @@ export function AiPage({
                       ))}
                     </div>
                   )}
+                </>
+              )
+            )}
+          </div>
 
-                  {msg.role === "model" && !msg.error && (
-                    <div className="ai-bubble-footer">
-                      <span className="ai-bubble-meta">
-                        {msg.model ?? config.model}
-                        {msg.thinkingLevel ? ` · ${msg.thinkingLevel}` : ""}
-                      </span>
-                      <button
-                        type="button"
-                        className="ai-copy-btn"
-                        title="Sao chép"
-                        aria-label="Sao chép câu trả lời"
-                        onClick={() => handleCopyReply(msg.id, msg.text)}
-                      >
-                        {copiedMsgId === msg.id ? (
-                          <Check size={10} strokeWidth={2.4} />
-                        ) : (
-                          <Copy size={10} strokeWidth={2.2} />
-                        )}
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </div>
-            ))}
+          <div className="ask-answer-footer">
+            <div className="ask-footer-hint">
+              <button
+                type="button"
+                className="ask-footer-settings-link"
+                title="Mở cài đặt Ask Nusa"
+                onClick={openAiSettings}
+              >
+                {isStreamingReply
+                  ? config.resolvedModel ?? "Gemini"
+                  : latestModelMsg?.model ?? config.resolvedModel ?? "Gemini"}
+              </button>
+              <span>
+                {isStreamingReply
+                  ? " · Streaming..."
+                  : " · Enter to ask a follow-up"}
+              </span>
+            </div>
 
-            {sending && (
-              <div className="ai-msg-row is-model">
-                <div className="ai-bubble ai-bubble-loading">
-                  <span className="ai-dot-pulse" />
-                  <span>
-                    {config.webSearch
-                      ? "Đang tìm kiếm & suy luận..."
-                      : "Đang suy luận..."}
-                  </span>
-                </div>
+            {!isStreamingReply && latestModelMsg && (
+              <div className="ask-footer-actions">
+                {!latestModelMsg.error && (
+                  <button
+                    type="button"
+                    className="ask-footer-pill-btn"
+                    onClick={handleCopyLatest}
+                  >
+                    {copied ? (
+                      <>
+                        <Check size={11} strokeWidth={2.5} />
+                        <span>Copied</span>
+                      </>
+                    ) : (
+                      <span>Copy</span>
+                    )}
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  className="ask-footer-pill-btn"
+                  onClick={handleNewChat}
+                >
+                  New chat
+                </button>
               </div>
             )}
-
-            <div ref={chatEndRef} />
           </div>
-        )}
-      </div>
-
-      {renderPillBar()}
+        </>
+      )}
     </div>
   );
 }

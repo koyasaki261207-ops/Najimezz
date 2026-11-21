@@ -1,7 +1,8 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { CalendarEvent, CalendarEventMap } from "../types/calendar";
 
 const STORAGE_KEY = "nusa.calendarEvents.v1";
+const CALENDAR_UPDATED_EVENT = "nusa:calendar-updated";
 
 export const EVENT_COLORS = [
   "#EF4444",
@@ -67,36 +68,60 @@ export interface AddEventInput {
   color?: string;
 }
 
+export function addCalendarEventDirect(
+  input: AddEventInput
+): CalendarEvent | null {
+  const title = input.title.trim();
+  if (!title) return null;
+
+  const dateKey = /^\d{4}-\d{2}-\d{2}$/.test(input.dateKey.trim())
+    ? input.dateKey.trim()
+    : toDateKey(new Date());
+
+  const newEvent: CalendarEvent = {
+    id: generateId(),
+    dateKey,
+    title,
+    time: input.time.trim(),
+    note: input.note.trim(),
+    color: input.color || EVENT_COLORS[0],
+    createdAtMs: Date.now(),
+  };
+
+  const prev = loadStoredEvents();
+  const current = prev[dateKey] ?? [];
+  const nextMap: CalendarEventMap = {
+    ...prev,
+    [dateKey]: sortDayEvents([...current, newEvent]),
+  };
+  saveStoredEvents(nextMap);
+  window.dispatchEvent(new Event(CALENDAR_UPDATED_EVENT));
+  return newEvent;
+}
+
 export function useCalendarEvents() {
   const [eventsByDate, setEventsByDate] = useState<CalendarEventMap>(() =>
     loadStoredEvents()
   );
 
-  const addEvent = useCallback((input: AddEventInput): CalendarEvent | null => {
-    const title = input.title.trim();
-    if (!title) return null;
-
-    const newEvent: CalendarEvent = {
-      id: generateId(),
-      dateKey: input.dateKey,
-      title,
-      time: input.time.trim(),
-      note: input.note.trim(),
-      color: input.color || EVENT_COLORS[0],
-      createdAtMs: Date.now(),
+  useEffect(() => {
+    const sync = () => {
+      setEventsByDate(loadStoredEvents());
     };
+    window.addEventListener(CALENDAR_UPDATED_EVENT, sync);
+    window.addEventListener("storage", sync);
+    return () => {
+      window.removeEventListener(CALENDAR_UPDATED_EVENT, sync);
+      window.removeEventListener("storage", sync);
+    };
+  }, []);
 
-    setEventsByDate((prev) => {
-      const current = prev[input.dateKey] ?? [];
-      const nextMap: CalendarEventMap = {
-        ...prev,
-        [input.dateKey]: sortDayEvents([...current, newEvent]),
-      };
-      saveStoredEvents(nextMap);
-      return nextMap;
-    });
-
-    return newEvent;
+  const addEvent = useCallback((input: AddEventInput): CalendarEvent | null => {
+    const created = addCalendarEventDirect(input);
+    if (created) {
+      setEventsByDate(loadStoredEvents());
+    }
+    return created;
   }, []);
 
   const deleteEvent = useCallback((dateKey: string, eventId: string) => {
