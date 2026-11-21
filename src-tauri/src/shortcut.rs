@@ -5,7 +5,7 @@ use tauri::plugin::TauriPlugin;
 use tauri::{AppHandle, Emitter, Manager, State, Wry};
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 
-pub const ASK_SHORTCUT_LABEL: &str = "Ctrl + Alt + Space";
+pub const ASK_SHORTCUT_LABEL: &str = "Ctrl + Space";
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -33,7 +33,7 @@ pub struct ShortcutStatusState {
 }
 
 pub fn ask_nusa_shortcut() -> Shortcut {
-    Shortcut::new(Some(Modifiers::CONTROL | Modifiers::ALT), Code::Space)
+    Shortcut::new(Some(Modifiers::CONTROL), Code::Space)
 }
 
 pub fn build_shortcut_plugin() -> TauriPlugin<Wry> {

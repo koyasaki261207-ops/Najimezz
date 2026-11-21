@@ -4393,3 +4393,92 @@ body,
   border-color: rgba(255, 255, 255, 0.26);
   color: #ffffff;
 }
+
+
+/* Prevent long media titles from overflowing MusicPage and pushing controls off-screen */
+.notch-expanded-layout,
+.notch-body-row {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.notch-nav-arrow {
+  flex-shrink: 0;
+}
+
+.notch-page-stage {
+  flex: 1 1 0%;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.music-page {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.music-top-row {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.music-artwork,
+.music-eq {
+  flex-shrink: 0;
+}
+
+.music-info {
+  flex: 1 1 0%;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.music-title,
+.music-artist,
+.music-inline-lyric {
+  display: block;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.music-progress-row {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.music-time {
+  flex-shrink: 0;
+}
+
+.music-progress-track {
+  flex: 1 1 0%;
+  min-width: 0;
+}
+
+.music-controls-row {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.music-lyrics-panel,
+.lyrics-scroll {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.lyric-line {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}

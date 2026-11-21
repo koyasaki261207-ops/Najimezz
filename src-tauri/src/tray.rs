@@ -55,7 +55,7 @@ pub fn setup_tray(
     let ask_item = MenuItem::with_id(
         app,
         MENU_ASK_NUSA_ID,
-        "Ask Nusa (Ctrl+Alt+Space)",
+        "Ask Nusa (Ctrl+Space)",
         true,
         None::<&str>,
     )?;

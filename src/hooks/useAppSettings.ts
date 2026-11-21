@@ -22,8 +22,19 @@ function mergeMissingPages(
   savedEnabled: NotchPageId[]
 ): { pagesOrder: NotchPageId[]; enabledPages: NotchPageId[] } {
   const validSet = new Set<NotchPageId>(ALL_KNOWN_PAGES);
-  const nextOrder = savedOrder.filter((id) => validSet.has(id));
-  const nextEnabled = savedEnabled.filter((id) => validSet.has(id));
+  const nextOrder: NotchPageId[] = [];
+  for (const id of savedOrder) {
+    if (validSet.has(id) && !nextOrder.includes(id)) {
+      nextOrder.push(id);
+    }
+  }
+
+  const nextEnabled: NotchPageId[] = [];
+  for (const id of savedEnabled) {
+    if (validSet.has(id) && !nextEnabled.includes(id)) {
+      nextEnabled.push(id);
+    }
+  }
 
   for (const pageId of ALL_KNOWN_PAGES) {
     if (!nextOrder.includes(pageId)) {
@@ -32,6 +43,10 @@ function mergeMissingPages(
         nextEnabled.push(pageId);
       }
     }
+  }
+
+  if (nextEnabled.length === 0) {
+    nextEnabled.push(nextOrder[0] ?? "music");
   }
 
   return { pagesOrder: nextOrder, enabledPages: nextEnabled };

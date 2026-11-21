@@ -295,7 +295,7 @@ export function SettingsWindow() {
   const [shortcutStatus, setShortcutStatus] = useState<AskShortcutStatus>({
     enabled: settings.askShortcutEnabled,
     registered: settings.askShortcutEnabled,
-    shortcut: "Ctrl + Alt + Space",
+    shortcut: "Ctrl + Space",
     error: null,
   });
 

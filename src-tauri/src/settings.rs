@@ -111,6 +111,8 @@ fn sanitize_settings(mut cfg: AppSettings) -> AppSettings {
     cfg.water_goal_ml = cfg.water_goal_ml.clamp(500, 6000);
 
     let mut clean_order: Vec<String> = Vec::new();
+    let mut newly_added_pages: Vec<String> = Vec::new();
+
     for id in &cfg.pages_order {
         if id == "apps" {
             for replacement in ["calendar", "ai"] {
@@ -124,9 +126,11 @@ fn sanitize_settings(mut cfg: AppSettings) -> AppSettings {
             clean_order.push(id.clone());
         }
     }
+
     for &id in ALL_PAGE_IDS {
         if !clean_order.iter().any(|existing| existing == id) {
             clean_order.push(id.to_string());
+            newly_added_pages.push(id.to_string());
         }
     }
     cfg.pages_order = clean_order;
@@ -134,7 +138,7 @@ fn sanitize_settings(mut cfg: AppSettings) -> AppSettings {
     let mut clean_enabled: Vec<String> = Vec::new();
     for id in cfg.enabled_pages {
         if id == "apps" {
-            for replacement in ["calendar", "system", "ai"] {
+            for replacement in ["calendar", "ai"] {
                 if !clean_enabled.iter().any(|existing| existing == replacement) {
                     clean_enabled.push(replacement.to_string());
                 }
@@ -145,13 +149,20 @@ fn sanitize_settings(mut cfg: AppSettings) -> AppSettings {
             clean_enabled.push(id);
         }
     }
-    for &id in ALL_PAGE_IDS {
-        if !clean_enabled.iter().any(|existing| existing == id) {
-            clean_enabled.push(id.to_string());
+
+    for id in newly_added_pages {
+        if !clean_enabled.contains(&id) {
+            clean_enabled.push(id);
         }
     }
+
     if clean_enabled.is_empty() {
-        clean_enabled.push("music".to_string());
+        let fallback = cfg
+            .pages_order
+            .first()
+            .cloned()
+            .unwrap_or_else(|| "music".to_string());
+        clean_enabled.push(fallback);
     }
     cfg.enabled_pages = clean_enabled;
 

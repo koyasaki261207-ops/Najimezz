@@ -65,16 +65,20 @@ if ($Mode -eq "release") {
     }
 
     foreach ($dir in $desktopDirs) {
-        $shortcutPath = Join-Path $dir "$ShortcutName.lnk"
-        $shortcut = $wsh.CreateShortcut($shortcutPath)
-        $shortcut.TargetPath = $exePath
-        $shortcut.WorkingDirectory = Split-Path -Parent $exePath
-        $shortcut.Description = "Launch Nusa Floating Notch"
-        if (Test-Path $iconPath) {
-            $shortcut.IconLocation = "$iconPath,0"
+        try {
+            $shortcutPath = Join-Path $dir "$ShortcutName.lnk"
+            $shortcut = $wsh.CreateShortcut($shortcutPath)
+            $shortcut.TargetPath = $exePath
+            $shortcut.WorkingDirectory = Split-Path -Parent $exePath
+            $shortcut.Description = "Launch Nusa Floating Notch"
+            if (Test-Path $iconPath) {
+                $shortcut.IconLocation = "$iconPath,0"
+            }
+            $shortcut.Save()
+            Write-Host "Created Desktop shortcut (Release): $shortcutPath"
+        } catch {
+            Write-Warning "Skipped desktop shortcut in $dir : $($_.Exception.Message)"
         }
-        $shortcut.Save()
-        Write-Host "Created Desktop shortcut (Release): $shortcutPath"
     }
     Write-Host "Target: $exePath"
 } else {
